@@ -11,5 +11,7 @@ EXPOSE 81
 EXPOSE 3306
 
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY start.sh /
+RUN chmod +x /start.sh
 
-CMD ["/usr/bin/supervisord"]
+CMD ["/start.sh"]
