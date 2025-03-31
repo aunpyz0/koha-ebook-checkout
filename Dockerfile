@@ -4,6 +4,7 @@ RUN apt-get -y install mariadb-server supervisor
 RUN service mysql start && koha-create --create-db mylibrary
 RUN sed -i '/Listen 80/a Listen 81' /etc/apache2/ports.conf
 RUN sed -i '/# Intranet/{n;s/80/81/}' /etc/apache2/sites-available/mylibrary.conf
+RUN sed -i -E "s/(<enable_plugins>)0/\11/g" /etc/koha/sites/mylibrary/koha-conf.xml
 RUN a2dissite 000-default && a2ensite mylibrary
 
 EXPOSE 80

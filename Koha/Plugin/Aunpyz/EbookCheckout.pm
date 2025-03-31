@@ -1,0 +1,106 @@
+package Koha::Plugin::Aunpyz::EbookCheckout;
+
+use Modern::Perl;
+
+use base qw(Koha::Plugins::Base);
+
+use C4::Auth;
+use C4::Koha;
+use C4::Circulation;
+use C4::Reserves;
+use C4::Output;
+use C4::Members;
+use C4::Biblio;
+use C4::Items;
+use Koha::DateUtils qw( dt_from_string );
+use Koha::Acquisition::Currencies;
+use Koha::Patrons;
+use Koha::Patron::Images;
+use Koha::Patron::Messages;
+use Koha::Token;
+
+## Here we set our plugin version
+our $VERSION = '0.0.1';
+
+## Here is our metadata, some keys are required, some are optional
+our $metadata = {
+    name            => 'Ebook Checkout',
+    author          => 'Aunnop Kattiyanet',
+    date_authored   => '2025-03-26',
+    date_updated    => '2025-03-26',
+    minimum_version => '17.11',
+    maximum_version => undef,
+    version         => $VERSION,
+    description     => 'This plugin adds the ability to checkout book with licensed ebook (857$u) via OPAC',
+};
+
+
+## This is the minimum code required for a plugin's 'new' method
+## More can be added, but none should be removed
+sub new {
+    my ( $class, $args ) = @_;
+
+    $args->{'metadata'} = $metadata;
+    $args->{'metadata'}->{'class'} = $class;
+
+    my $self = $class->SUPER::new($args);
+
+    return $self;
+}
+
+## This is the 'install' method. Any database tables or other setup that should
+## be done when the plugin if first installed should be executed in this method.
+## The installation method should always return true if the installation succeeded
+## or false if it failed.
+sub install() {
+    my ( $self, $args ) = @_;
+
+    # TODO: customize marc_tag_structure to have tag 857
+    # TODO: customize marc_subfield_structure to have tagsubfield u for tagfield 857
+
+    return 1;
+}
+
+## This method will be run just before the plugin files are deleted
+## when a plugin is uninstalled. It is good practice to clean up
+## after ourselves!
+sub uninstall() {
+    my ( $self, $args ) = @_;
+
+    # TODO: remove all tagfield 857 from marc_subfield_structure
+    # TODO: remove tag 857 from marc_tag_structure
+
+    return 1;
+}
+
+## The existance of a 'tool' subroutine means the plugin is capable
+## of running a tool. The difference between a tool and a report is
+## primarily semantic, but in general any plugin that modifies the
+## Koha database should be considered a tool
+sub tool {
+    my ( $self, $args ) = @_;
+}
+
+sub issuable {
+    my ( $self, $cardnumber, $barcode ) = @_;
+
+    my $borrower;
+    if ( $cardnumber ) {
+        $borrower = Koha::Patrons->find( { cardnumber => $cardnumber } );
+        $borrower = $borrower->unblessed if $borrower;
+    }
+
+    my $impossible = {};
+    my $needconfirm = {};
+    ( $impossible, $needconfirm ) = CanBookBeIssued(
+        $borrower,
+        $barcode,
+        undef,
+        0,
+        C4::Context->preference("AllowItemsOnHoldCheckoutSCO")
+    );
+
+    print qq|{ "impossible": $impossible, "needconfirm": $needconfirm }|
+}
+
+1;
