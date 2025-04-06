@@ -3,6 +3,7 @@
 use Modern::Perl;
 
 use CGI qw ( -utf8 );
+use JSON;
 
 use C4::Context;
 use lib C4::Context->config("pluginsdir");
@@ -16,4 +17,15 @@ my $ebookcheckout = Koha::Plugin::Aunpyz::EbookCheckout->new({ cgi => $cgi });
 my $cardnumber = $cgi->param("cardnumber") || '';
 my $barcode = $cgi->param("barcode") || '';
 
-$ebookcheckout->issuable( $cardnumber, $barcode );
+my ( $impossible, $needconfirm ) = $ebookcheckout->issuable( $cardnumber, $barcode );
+
+print $cgi->header(
+	{
+		-type => "application/json",
+		-charset => "UTF-8",
+		-encoding => "UTF-8"
+	});
+
+my %json = ( 'impossible' => $impossible, 'needconfirm' => $needconfirm );
+my $json = encode_json \%json;
+print $json;

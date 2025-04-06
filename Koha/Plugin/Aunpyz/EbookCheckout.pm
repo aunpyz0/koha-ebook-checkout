@@ -92,15 +92,13 @@ sub issuable {
 
     my $impossible = {};
     my $needconfirm = {};
-    ( $impossible, $needconfirm ) = CanBookBeIssued(
+    return CanBookBeIssued(
         $borrower,
         $barcode,
         undef,
         0,
         C4::Context->preference("AllowItemsOnHoldCheckoutSCO")
     );
-
-    print qq|{ "impossible": $impossible, "needconfirm": $needconfirm }|
 }
 
 1;
