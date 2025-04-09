@@ -89,7 +89,8 @@ sub issuable {
     my $sessionID = $cgi->cookie("CGISESSID");
     if ( $sessionID ) {
         my $session = C4::Auth::get_session($sessionID);
-        if ( $session ) {
+        # TODO: Check if session is expired?
+        if ( $session && $session->param("id") ) {
             # TODO: Will this pop out of context?
             C4::Context->_new_userenv($sessionID);
             C4::Context->set_userenv(
@@ -122,7 +123,7 @@ sub issuable {
             );
         }
     }
-    # TODO: Should have different response
+    return ( { "UNAUTHORIZED" => 1 } );
 }
 
 1;

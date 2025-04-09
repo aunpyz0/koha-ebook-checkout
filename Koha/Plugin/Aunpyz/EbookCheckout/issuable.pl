@@ -18,13 +18,23 @@ my $barcode = $cgi->param("barcode") || '';
 
 my ( $impossible, $needconfirm ) = $ebookcheckout->issuable( $barcode );
 
-print $cgi->header(
-	{
-		-type => "application/json",
-		-charset => "UTF-8",
-		-encoding => "UTF-8"
-	});
+if ( $impossible->{UNAUTHORIZED} ) {
+	print $cgi->header(
+		{
+			-status => 401
+		});
+}
+else {
+	# TODO: need to process into Either<ISSUABLE, NONISSUABLE>
+	print $cgi->header(
+		{
+			-status => 200,
+			-type => "application/json",
+			-charset => "UTF-8",
+			-encoding => "UTF-8"
+		});
 
-my %json = ( 'impossible' => $impossible, 'needconfirm' => $needconfirm );
-my $json = encode_json \%json;
-print $json;
+	my %json = ( 'impossible' => $impossible, 'needconfirm' => $needconfirm );
+	my $json = encode_json \%json;
+	print $json;
+}
