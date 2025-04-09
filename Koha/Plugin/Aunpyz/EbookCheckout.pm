@@ -59,6 +59,25 @@ sub install() {
     # TODO: customize marc_tag_structure to have tag 857
     # TODO: customize marc_subfield_structure to have tagsubfield u for tagfield 857
 
+    my $opacuserjs = $self->_prepareopacuserjs();
+
+    $opacuserjs .= q|
+/* JS for Koha Ebook Checkout Plugin */
+$(document).ready(function() {
+    if ($(location).attr("pathname").endsWith("opac-detail.pl")) {
+    }
+});
+/* End of JS for Koha Ebook Checkout Plugin */|;
+    C4::Context->set_preference( 'opacuserjs', $opacuserjs );
+
+    return 1;
+}
+
+## This is the 'upgrade' method. It will be triggered when a newer version of a
+## plugin is installed over an existing older version of a plugin
+sub upgrade {
+    my ( $self, $args ) = @_;
+
     return 1;
 }
 
@@ -71,6 +90,9 @@ sub uninstall() {
     # TODO: remove all tagfield 857 from marc_subfield_structure
     # TODO: remove tag 857 from marc_tag_structure
 
+    my $opacuserjs = $self->_prepareopacuserjs();
+    C4::Context->set_preference( 'opacuserjs', $opacuserjs );
+
     return 1;
 }
 
@@ -80,6 +102,15 @@ sub uninstall() {
 ## Koha database should be considered a tool
 sub tool {
     my ( $self, $args ) = @_;
+}
+
+sub _prepareopacuserjs() {
+    my ( $self ) = @_;
+
+    my $opacuserjs = C4::Context->preference( 'opacuserjs' );
+    $opacuserjs =~ s/\/\* JS for Koha Ebook Checkout Plugin.*End of JS for Koha Ebook Checkout Plugin \*\///gs;
+
+    return $opacuserjs;
 }
 
 sub issuable {
