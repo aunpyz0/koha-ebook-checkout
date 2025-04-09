@@ -5,6 +5,7 @@ use Modern::Perl;
 use base qw(Koha::Plugins::Base);
 
 use C4::Auth;
+use C4::Context;
 use C4::Koha;
 use C4::Circulation;
 use C4::Reserves;
@@ -82,23 +83,46 @@ sub tool {
 }
 
 sub issuable {
-    my ( $self, $cardnumber, $barcode ) = @_;
+    my ( $self, $barcode ) = @_;
+    my $cgi = $self->{cgi};
 
-    my $borrower;
-    if ( $cardnumber ) {
-        $borrower = Koha::Patrons->find( { cardnumber => $cardnumber } );
-        $borrower = $borrower->unblessed if $borrower;
+    my $sessionID = $cgi->cookie("CGISESSID");
+    if ( $sessionID ) {
+        my $session = C4::Auth::get_session($sessionID);
+        if ( $session ) {
+            # TODO: Will this pop out of context?
+            C4::Context->_new_userenv($sessionID);
+            C4::Context->set_userenv(
+                $session->param("number"),
+                $session->param("id"),
+                $session->param("cardnumber"),
+                $session->param("firstname"),
+                $session->param("surname"),
+                $session->param("branch"),
+                $session->param("branchname"),
+                $session->param("flags"),
+                $session->param("emailaddress"),
+                $session->param("branchprinter"),
+                $session->param("shibboleth")
+            );
+
+            my $borrower;
+            my $cardnumber = $session->param("cardnumber");
+            if ( $cardnumber ) {
+                $borrower = Koha::Patrons->find( { cardnumber => $cardnumber } );
+                $borrower = $borrower->unblessed if $borrower;
+            }
+
+            return CanBookBeIssued(
+                $borrower,
+                $barcode,
+                undef,
+                0,
+                C4::Context->preference("AllowItemsOnHoldCheckoutSCO")
+            );
+        }
     }
-
-    my $impossible = {};
-    my $needconfirm = {};
-    return CanBookBeIssued(
-        $borrower,
-        $barcode,
-        undef,
-        0,
-        C4::Context->preference("AllowItemsOnHoldCheckoutSCO")
-    );
+    # TODO: Should have different response
 }
 
 1;

@@ -14,10 +14,9 @@ my $cgi = new CGI;
 
 my $ebookcheckout = Koha::Plugin::Aunpyz::EbookCheckout->new({ cgi => $cgi });
 
-my $cardnumber = $cgi->param("cardnumber") || '';
 my $barcode = $cgi->param("barcode") || '';
 
-my ( $impossible, $needconfirm ) = $ebookcheckout->issuable( $cardnumber, $barcode );
+my ( $impossible, $needconfirm ) = $ebookcheckout->issuable( $barcode );
 
 print $cgi->header(
 	{
