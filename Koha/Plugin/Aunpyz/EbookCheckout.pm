@@ -65,6 +65,22 @@ sub install() {
 /* JS for Koha Ebook Checkout Plugin */
 $(document).ready(function() {
     if ($(location).attr("pathname").endsWith("opac-detail.pl")) {
+        const $table = $('#holdingst.table');
+        $table.find('thead tr').append('<th id="item_checkout" data-colname="item_checkout" tabindex="0" aria-controls="holdingst" rowspan="1" colspan="1" aria-label="Checkout" style="width: 0px;">Checkout</th>');
+        const $trs = $table.find('tbody tr');
+        $trs.each(function() {
+            const schema = $(this).find('.status link').attr('href');
+            $('<td class="checkout">')
+                .append({
+                  'http://schema.org/InStock': '<a class="btn" href="#"><i class="icon-book"></i> Checkout</a>',
+                  'http://schema.org/Discontinued': '<a class="btn disabled" href="#"><i class="icon-remove"></i> Checkout</a>',
+                  'http://schema.org/OutOfStock': '<a class="btn disabled" href="#"><i class="icon-remove"></i> Checkout</a>',
+                }[schema])
+                .appendTo(this);
+        });
+        $trs.find('td.checkout').click(function(e) {
+            e.preventDefault();
+        })
     }
 });
 /* End of JS for Koha Ebook Checkout Plugin */|;
