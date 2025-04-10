@@ -61,13 +61,13 @@ sub install() {
 
     my $opacuserjs = $self->_prepareopacuserjs();
 
-    $opacuserjs .= q|
+    $opacuserjs .= q{{
 /* JS for Koha Ebook Checkout Plugin */
 $(document).ready(function() {
     if ($(location).attr("pathname").endsWith("opac-detail.pl")) {
         $.ajax({
             type:   "GET",
-            url:    `/ebook-checkout/opac-detail.pl${$(location).attr("search")}`,
+            url:    `/ebook-checkout/opac-detail.pl${$(location).attr("search").replace(/=(?=&|$)/gm, "")}`,
             cache:  false,
             success: function(template) {
                 $('body').append(template)
@@ -75,7 +75,7 @@ $(document).ready(function() {
         });
     }
 });
-/* End of JS for Koha Ebook Checkout Plugin */|;
+/* End of JS for Koha Ebook Checkout Plugin */}};
     C4::Context->set_preference( 'opacuserjs', $opacuserjs );
 
     return 1;
