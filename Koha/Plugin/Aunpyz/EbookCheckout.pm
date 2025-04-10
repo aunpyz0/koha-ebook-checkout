@@ -65,22 +65,14 @@ sub install() {
 /* JS for Koha Ebook Checkout Plugin */
 $(document).ready(function() {
     if ($(location).attr("pathname").endsWith("opac-detail.pl")) {
-        const $table = $('#holdingst.table');
-        $table.find('thead tr').append('<th id="item_checkout" data-colname="item_checkout" tabindex="0" aria-controls="holdingst" rowspan="1" colspan="1" aria-label="Checkout" style="width: 0px;">Checkout</th>');
-        const $trs = $table.find('tbody tr');
-        $trs.each(function() {
-            const schema = $(this).find('.status link').attr('href');
-            $('<td class="checkout">')
-                .append({
-                  'http://schema.org/InStock': '<a class="btn" href="#"><i class="icon-book"></i> Checkout</a>',
-                  'http://schema.org/Discontinued': '<a class="btn disabled" href="#"><i class="icon-remove"></i> Checkout</a>',
-                  'http://schema.org/OutOfStock': '<a class="btn disabled" href="#"><i class="icon-remove"></i> Checkout</a>',
-                }[schema])
-                .appendTo(this);
+        $.ajax({
+            type:   "GET",
+            url:    `/ebook-checkout/opac-detail.pl${$(location).attr("search")}`,
+            cache:  false,
+            success: function(template) {
+                $('body').append(template)
+            },
         });
-        $trs.find('td.checkout').click(function(e) {
-            e.preventDefault();
-        })
     }
 });
 /* End of JS for Koha Ebook Checkout Plugin */|;
@@ -129,8 +121,8 @@ sub _prepareopacuserjs() {
     return $opacuserjs;
 }
 
-sub issuable {
-    my ( $self, $barcode ) = @_;
+sub _getsession {
+    my ( $self ) = @_;
     my $cgi = $self->{cgi};
 
     my $sessionID = $cgi->cookie("CGISESSID");
@@ -153,22 +145,45 @@ sub issuable {
                 $session->param("branchprinter"),
                 $session->param("shibboleth")
             );
-
-            my $borrower;
-            my $cardnumber = $session->param("cardnumber");
-            if ( $cardnumber ) {
-                $borrower = Koha::Patrons->find( { cardnumber => $cardnumber } );
-                $borrower = $borrower->unblessed if $borrower;
-            }
-
-            return CanBookBeIssued(
-                $borrower,
-                $barcode,
-                undef,
-                0,
-                C4::Context->preference("AllowItemsOnHoldCheckoutSCO")
-            );
+            return $session;
         }
+    }
+    return undef;
+}
+
+sub opacdetail {
+    my ( $self, $biblionumber ) = @_;
+    my $cgi = $self->{cgi};
+
+    my $session = $self->_getsession();
+    my $template = $self->get_template({ file => 'opac-detail.tt' });
+    $template->param(
+        loggedin => $session ? 1 : 0,
+    );
+
+    $self->output_html( $template->output() );
+}
+
+sub issuable {
+    my ( $self, $barcode ) = @_;
+    my $cgi = $self->{cgi};
+
+    my $session = $self->_getsession();
+    if ( $session ) {
+        my $borrower;
+        my $cardnumber = $session->param("cardnumber");
+        if ( $cardnumber ) {
+            $borrower = Koha::Patrons->find( { cardnumber => $cardnumber } );
+            $borrower = $borrower->unblessed if $borrower;
+        }
+
+        return CanBookBeIssued(
+            $borrower,
+            $barcode,
+            undef,
+            0,
+            C4::Context->preference("AllowItemsOnHoldCheckoutSCO")
+        );
     }
     return ( { "UNAUTHORIZED" => 1 } );
 }
