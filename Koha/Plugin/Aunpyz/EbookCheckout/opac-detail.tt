@@ -10,7 +10,7 @@
                 const schema = $(this).find('.status link').attr('href');
                 $('<td class="checkout">')
                     .append({
-                      'http://schema.org/InStock': '<a class="btn[% IF loggedin != 1 %] disabled[% END %]" href="#"><i class="icon-book"></i> Checkout</a>',
+                      'http://schema.org/InStock': '<a class="btn [% IF loggedin != 1 %]disabled[% ELSE %]checkout[% END %]" href="#"><i class="icon-book"></i> Checkout</a>',
                       'http://schema.org/Discontinued': '<a class="btn disabled" href="#"><i class="icon-remove"></i> Checkout</a>',
                       'http://schema.org/OutOfStock': '<a class="btn disabled" href="#"><i class="icon-remove"></i> Checkout</a>',
                     }[schema])
@@ -19,6 +19,16 @@
             $trs.find('td.checkout').click(function(e) {
                 e.preventDefault();
             })
+            [% IF loggedin == 1%]
+            $trs.find('td.checkout a.checkout:not(.disabled)').click(function(e) {
+                $button = $(e.target);
+                $button.addClass('disabled');
+                // TODO: ajax call
+                $button.removeClass('checkout');
+                $button.find('i').remove();
+                $button.prepend('<i class="icon-remove"></i>')
+            })
+            [% END %]
         }
     });
 </script>
