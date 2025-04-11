@@ -2,6 +2,8 @@ package Koha::Plugin::Aunpyz::EbookCheckout;
 
 use Modern::Perl;
 
+use XML::Simple;
+
 use base qw(Koha::Plugins::Base);
 
 use C4::Auth;
@@ -58,6 +60,10 @@ sub install() {
 
     # TODO: customize marc_tag_structure to have tag 857
     # TODO: customize marc_subfield_structure to have tagsubfield u for tagfield 857
+    # TODO: execute this sql
+    # INSERT INTO koha_cts.columns_settings (module,page,tablename,columnname,cannot_be_toggled,is_hidden) VALUES
+    #  ('opac','biblio-detail','holdingst','item_barcode',0,0) ON DUPLICATE KEY UPDATE is_hidden=0, cannot_be_toggled=0;
+    # https://git.koha-community.org/Koha-community/Koha/src/branch/17.11.x/admin/columns_settings.pl
 
     my $opacuserjs = $self->_prepareopacuserjs();
 
@@ -151,6 +157,24 @@ sub _getsession {
     return undef;
 }
 
+sub _getbiblionumber {
+    my ( $self, $barcode) = @_;
+
+    my $item = C4::Items::GetItem({ barcode => $barcode });
+    return $item->{biblionumber};
+}
+
+sub hasprivateebook {
+    my ( $self, $biblionumber ) = @_;
+
+    my $xml = C4::Biblio::GetXmlBiblio( $biblionumber );
+    $xml = XMLin($xml);
+    my $datafield = $xml->{datafield};
+    my ( $privateebook ) = grep { $_->{tag} eq 857 && $_->{subfield}->{code} eq 'u' } @$datafield;
+
+    return $privateebook ? 1 : 0;
+}
+
 sub opacdetail {
     my ( $self, $biblionumber ) = @_;
     my $cgi = $self->{cgi};
@@ -164,6 +188,7 @@ sub opacdetail {
     $self->output_html( $template->output() );
 }
 
+# TODO: remove
 sub issuable {
     my ( $self, $barcode ) = @_;
     my $cgi = $self->{cgi};
@@ -184,6 +209,100 @@ sub issuable {
             0,
             C4::Context->preference("AllowItemsOnHoldCheckoutSCO")
         );
+    }
+    return ( { "UNAUTHORIZED" => 1 } );
+}
+
+sub ebookcheckout {
+    my ( $self, $barcode ) = @_;
+    my $cgi = $self->{cgi};
+
+    my $session = $self->_getsession();
+    if ( $session ) {
+        my $biblionumber = $self->_getbiblionumber( $barcode );
+        if ( $biblionumber ) {
+            if ( $self->hasprivateebook( $biblionumber ) ) {
+                my $borrower;
+                my $cardnumber = $session->param("cardnumber");
+                if ( $cardnumber ) {
+                    $borrower = Koha::Patrons->find( { cardnumber => $cardnumber } );
+                    $borrower = $borrower->unblessed if $borrower;
+                }
+
+                my ( $impossible, $needconfirm ) = CanBookBeIssued(
+                    $borrower,
+                    $barcode,
+                    undef,
+                    0,
+                    C4::Context->preference("AllowItemsOnHoldCheckoutSCO")
+                );
+
+                # my $confirm_required = 0;
+                # my $issue_error;
+                # if ( $confirm_required = scalar keys %$needconfirm ) {
+                #     for my $error ( qw( UNKNOWN_BARCODE max_loans_allowed ISSUED_TO_ANOTHER NO_MORE_RENEWALS NOT_FOR_LOAN DEBT WTHDRAWN RESTRICTED RESERVED ITEMNOTSAMEBRANCH EXPIRED DEBARRED CARD_LOST GNA INVALID_DATE UNKNOWN_BARCODE TOO_MANY DEBT_GUARANTEES USERBLOCKEDOVERDUE PATRON_CANT PREVISSUE NOT_FOR_LOAN_FORCING ITEM_LOST) ) {
+                #         if ( $needconfirm->{$error} ) {
+                #             $issue_error = $error;
+                #             last;
+                #         }
+                #     }
+                # }
+                if ( scalar keys %$impossible || scalar keys %$needconfirm ) {
+                    return ( $impossible, $needconfirm );
+                }
+
+                # if (scalar keys %$impossible) {
+                #     my $issue_error = (keys %$impossible)[0]; # FIXME This is wrong, we assume only one error and keys are not ordered
+
+                #     warn "issue_error: $issue_error";
+
+                #     # TODO: do something
+                # } elsif ( $needconfirm->{RENEW_ISSUE} ) {
+                #     # TODO: might have to handle renewal
+                # } else {
+                    my ( $hold_existed, $item );
+                    if ( C4::Context->preference('HoldFeeMode') eq 'any_time_is_collected' ) {
+                        # There is no easy way to know if the patron has been charged for this item.
+                        # So we check if a hold existed for this item before the check in
+                        $item = Koha::Items->find({ barcode => $barcode });
+                        $hold_existed = Koha::Holds->search(
+                            {
+                                -and => {
+                                    borrowernumber => $borrower->{borrowernumber},
+                                    -or            => {
+                                        biblionumber => $item->biblionumber,
+                                        itemnumber   => $item->itemnumber
+                                    }
+                                }
+                            }
+                        )->count;
+                    }
+                    AddIssue( $borrower, $barcode );
+
+                    if ( $hold_existed ) {
+                        # my $dtf = Koha::Database->new->schema->storage->datetime_parser;
+                        # $template->param(
+                        #     # If the hold existed before the check in, let's confirm that the charge line exists
+                        #     # Note that this should not be needed but since we do not have proper exception handling here we do it this way
+                        #     patron_has_hold_fee => Koha::Account::Lines->search(
+                        #         {
+                        #             borrowernumber => $borrower->{borrowernumber},
+                        #             accounttype    => 'Res',
+                        #             description    => 'Reserve Charge - ' . $item->biblio->title,
+                        #             date           => $dtf->format_date(dt_from_string)
+                        #         }
+                        #       )->count,
+                        # );
+                    }
+
+                # }
+
+                return;
+                # TODO: implement
+            }
+            return ( { "NO_PRIVATE_EBOOK" => 1 } );
+        }
+        return ( { "UNKNOWN_BARCODE" => 1 } );
     }
     return ( { "UNAUTHORIZED" => 1 } );
 }

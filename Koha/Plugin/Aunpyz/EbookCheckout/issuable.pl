@@ -23,8 +23,7 @@ if ( $impossible->{UNAUTHORIZED} ) {
 		{
 			-status => 401
 		});
-}
-else {
+} else {
 	# TODO: need to process into Either<ISSUABLE, NONISSUABLE>
 	print $cgi->header(
 		{
