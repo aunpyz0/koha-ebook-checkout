@@ -60,20 +60,34 @@ sub install() {
 
     # TODO: customize marc_tag_structure to have tag 857
     # TODO: customize marc_subfield_structure to have tagsubfield u for tagfield 857
-    # TODO: execute this sql
+    # TODO: execute these sql
     # INSERT INTO koha_cts.columns_settings (module,page,tablename,columnname,cannot_be_toggled,is_hidden) VALUES
     #  ('opac','biblio-detail','holdingst','item_barcode',0,0) ON DUPLICATE KEY UPDATE is_hidden=0, cannot_be_toggled=0;
     # https://git.koha-community.org/Koha-community/Koha/src/branch/17.11.x/admin/columns_settings.pl
+    # INSERT INTO koha_cts.borrower_attribute_types (code,description,`repeatable`,unique_id,opac_display,opac_editable,staff_searchable,authorised_value_category,display_checkout,category_code,class) VALUES
+    #  ('SHOW_BCODE','Show Barcode',0,0,0,0,0,'',0,NULL,'') ON DUPLICATE KEY UPDATE code=code;
+    # opac/opac-user.pl:289
+    # koha-tmpl/opac-tmpl/bootstrap/en/modules/opac-user.tt:282
 
     my $opacuserjs = $self->_prepareopacuserjs();
 
     $opacuserjs .= q{{
 /* JS for Koha Ebook Checkout Plugin */
 $(document).ready(function() {
-    if ($(location).attr('pathname').endsWith('opac-detail.pl')) {
+    const pathname = $(location).attr('pathname');
+    if (pathname.endsWith('opac-detail.pl')) {
         $.ajax({
             type: 'GET',
             url: `/ebook-checkout/opac-detail.pl${$(location).attr('search').replace(/=(?=&|$)/gm, '')}`,
+            cache: false,
+            success: function(template) {
+                $('body').append(template)
+            },
+        });
+    } else if (pathname.endsWith('opac-user.pl')) {
+        $.ajax({
+            type: 'GET',
+            url: '/ebook-checkout/opac-user.pl',
             cache: false,
             success: function(template) {
                 $('body').append(template)
@@ -186,6 +200,19 @@ sub opacdetail {
     );
 
     $self->output_html( $template->output() );
+}
+
+sub opacuser {
+    my ( $self ) = @_;
+    my $cgi = $self->{cgi};
+
+    my $session = $self->_getsession();
+    my $template = $self->get_template({ file => 'opac-user.tt' });
+    $template->param(
+        loggedin => $session ? 1 : 0,
+    );
+
+    $self->output_html( $template->output(), $session ? 200 : 401 );
 }
 
 # TODO: remove
