@@ -70,10 +70,10 @@ sub install() {
     $opacuserjs .= q{{
 /* JS for Koha Ebook Checkout Plugin */
 $(document).ready(function() {
-    if ($(location).attr("pathname").endsWith("opac-detail.pl")) {
+    if ($(location).attr('pathname').endsWith('opac-detail.pl')) {
         $.ajax({
-            type: "GET",
-            url: `/ebook-checkout/opac-detail.pl${$(location).attr("search").replace(/=(?=&|$)/gm, "")}`,
+            type: 'GET',
+            url: `/ebook-checkout/opac-detail.pl${$(location).attr('search').replace(/=(?=&|$)/gm, '')}`,
             cache: false,
             success: function(template) {
                 $('body').append(template)

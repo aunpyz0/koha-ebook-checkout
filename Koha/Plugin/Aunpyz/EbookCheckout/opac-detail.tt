@@ -23,10 +23,23 @@
             $trs.find('td.checkout a.checkout:not(.disabled)').click(function(e) {
                 $button = $(e.target);
                 $button.addClass('disabled');
-                // TODO: ajax call
-                $button.removeClass('checkout');
-                $button.find('i').remove();
-                $button.prepend('<i class="icon-remove"></i>')
+                const formData = new URLSearchParams();
+                formData.append('barcode', $button.parents('tr').find('.barcode').text())
+                $.ajax({
+                    type: 'POST',
+                    url: '/ebook-checkout/ebookcheckout.pl',
+                    cache: false,
+                    data: formData.toString(),
+                    success: function(data) {
+                        $button.removeClass('checkout');
+                        $button.find('i').remove();
+                        $button.prepend('<i class="icon-remove"></i>')
+                        location.reload();
+                    },
+                    error: function(jqXHR, status, error) {
+                        $button.toggleClass('disabled');
+                    }
+                });
             })
             [% END %]
         }
