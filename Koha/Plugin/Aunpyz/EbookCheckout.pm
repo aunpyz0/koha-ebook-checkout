@@ -3,8 +3,10 @@ package Koha::Plugin::Aunpyz::EbookCheckout;
 use Modern::Perl;
 
 use XML::Simple;
+use Crypt::Bcrypt qw( bcrypt bcrypt_check );
+use Crypt::YAPassGen;
 
-use base qw(Koha::Plugins::Base);
+use base qw( Koha::Plugins::Base );
 
 use C4::Auth;
 use C4::Context;
@@ -21,6 +23,7 @@ use Koha::Patrons;
 use Koha::Patron::Images;
 use Koha::Patron::Messages;
 use Koha::Token;
+use Koha::UploadedFiles;
 
 ## Here we set our plugin version
 our $VERSION = '0.0.1';
@@ -178,7 +181,7 @@ sub _getbiblionumber {
     return $item->{biblionumber};
 }
 
-sub hasprivateebook {
+sub _getprivateebook {
     my ( $self, $biblionumber ) = @_;
 
     my $xml = C4::Biblio::GetXmlBiblio( $biblionumber );
@@ -186,7 +189,27 @@ sub hasprivateebook {
     my $datafield = $xml->{datafield};
     my ( $privateebook ) = grep { $_->{tag} eq 857 && $_->{subfield}->{code} eq 'u' } @$datafield;
 
-    return $privateebook ? 1 : 0;
+    return $privateebook->{subfield}->{content};
+}
+
+sub _getprivateebookfilehandle {
+    my ( $self, $biblionumber ) = @_;
+
+    my $ebookurl = $self->_getprivateebook( $biblionumber ) || '';
+    my $hash = ( split( /\?id=/, $ebookurl ) )[1];
+
+    my $rec = Koha::UploadedFiles->search({
+        hashvalue => $hash,
+        public => 1,
+    })->next;
+
+    return $rec->file_handle if $rec;
+}
+
+sub hasprivateebook {
+    my ( $self, $biblionumber ) = @_;
+
+    return $self->_getprivateebook( $biblionumber ) ? 1 : 0;
 }
 
 sub opacdetail {
@@ -305,6 +328,9 @@ sub ebookcheckout {
                         )->count;
                     }
                     AddIssue( $borrower, $barcode );
+                    # TODO: encrypt file
+                    my $fh = $self->_getprivateebookfilehandle( $biblionumber );
+                    # C4::Context->config('upload_path');
 
                     if ( $hold_existed ) {
                         # my $dtf = Koha::Database->new->schema->storage->datetime_parser;
