@@ -192,18 +192,16 @@ sub _getprivateebook {
     return $privateebook->{subfield}->{content};
 }
 
-sub _getprivateebookfilehandle {
+sub _getprivateebookfilerecord {
     my ( $self, $biblionumber ) = @_;
 
     my $ebookurl = $self->_getprivateebook( $biblionumber ) || '';
     my $hash = ( split( /\?id=/, $ebookurl ) )[1];
 
-    my $rec = Koha::UploadedFiles->search({
+    return Koha::UploadedFiles->search({
         hashvalue => $hash,
         public => 1,
     })->next;
-
-    return $rec->file_handle if $rec;
 }
 
 sub hasprivateebook {
@@ -329,7 +327,8 @@ sub ebookcheckout {
                     }
                     AddIssue( $borrower, $barcode );
                     # TODO: encrypt file
-                    my $fh = $self->_getprivateebookfilehandle( $biblionumber );
+                    my $ebookfilerecord = $self->_getprivateebookfilerecord( $biblionumber );
+                    my $fh = $ebookfilerecord->file_handle if $ebookfilerecord;
                     # C4::Context->config('upload_path');
 
                     if ( $hold_existed ) {
