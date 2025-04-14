@@ -16,7 +16,7 @@ my $ebookcheckout = Koha::Plugin::Aunpyz::EbookCheckout->new({ cgi => $cgi });
 
 my $barcode = $cgi->param("barcode") || '';
 
-my ( $impossible, $needconfirm ) = $ebookcheckout->ebookcheckout( $barcode );
+my ( $impossible, $needconfirm, %checkout ) = $ebookcheckout->ebookcheckout( $barcode );
 
 if ( scalar keys %$impossible || scalar keys %$needconfirm ) {
 	if ( $impossible->{UNAUTHORIZED} ) {
@@ -50,4 +50,6 @@ if ( scalar keys %$impossible || scalar keys %$needconfirm ) {
 			-status => 200,
 			-type => "application/json",
 		});
+	my $json = encode_json \%checkout;
+	print $json;
 }

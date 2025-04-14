@@ -5,6 +5,7 @@ use Modern::Perl;
 use XML::Simple;
 use Crypt::Bcrypt qw( bcrypt bcrypt_check );
 use Crypt::YAPassGen;
+use UUID qw ( uuid );
 
 use base qw( Koha::Plugins::Base );
 
@@ -40,6 +41,8 @@ our $metadata = {
     description     => 'This plugin adds the ability to checkout book with licensed ebook (857$u) via OPAC',
 };
 
+## Table names
+our $checkouts_table = 'checkouts';
 
 ## This is the minimum code required for a plugin's 'new' method
 ## More can be added, but none should be removed
@@ -63,13 +66,13 @@ sub install() {
 
     # TODO: customize marc_tag_structure to have tag 857
     # TODO: customize marc_subfield_structure to have tagsubfield u for tagfield 857
-    my $checkout_table = $self->get_qualified_table_name('checkout');
+    my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
     my @installer_statements = (
         q { INSERT INTO columns_settings (module,page,tablename,columnname,cannot_be_toggled,is_hidden) VALUES
          ('opac','biblio-detail','holdingst','item_barcode',0,0) ON DUPLICATE KEY UPDATE is_hidden=0, cannot_be_toggled=0; },
         q { INSERT INTO koha_cts.borrower_attribute_types (code,description,`repeatable`,unique_id,opac_display,opac_editable,staff_searchable,authorised_value_category,display_checkout,category_code,class) VALUES
          ('SHOW_BCODE','Show Barcode',0,0,0,0,0,'',0,NULL,'') ON DUPLICATE KEY UPDATE code=code; },
-        qq { CREATE TABLE IF NOT EXISTS $checkout_table (
+        qq { CREATE TABLE IF NOT EXISTS $checkouts_table (
             `id` varchar(36) NOT NULL,
             `password` varchar(255) NOT NULL,
             `issue_id` int(11) NOT NULL,
@@ -134,8 +137,8 @@ sub uninstall() {
 
     # TODO: remove all tagfield 857 from marc_subfield_structure
     # TODO: remove tag 857 from marc_tag_structure
-    my $checkout_table = $self->get_qualified_table_name('checkout');
-    C4::Context->dbh->do("DROP TABLE $checkout_table") or die;
+    my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
+    C4::Context->dbh->do("DROP TABLE IF EXISTS $checkouts_table") or die;
 
     my $opacuserjs = $self->_prepareopacuserjs();
     C4::Context->set_preference( 'opacuserjs', $opacuserjs );
@@ -341,11 +344,27 @@ sub ebookcheckout {
                             }
                         )->count;
                     }
-                    AddIssue( $borrower, $barcode );
-                    # TODO: encrypt file
+                    my $dbh = C4::Context->dbh;
+                    $dbh->{AutoCommit} = 0;
+                    my $issue = AddIssue( $borrower, $barcode );
                     my $ebookfilerecord = $self->_getprivateebookfilerecord( $biblionumber );
+                    # TODO: copy ebookfilerecord
+                    # TODO: encrypt file
                     my $fh = $ebookfilerecord->file_handle if $ebookfilerecord;
                     # C4::Context->config('upload_path');
+
+                    my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
+                    my $uuid = uuid();
+                    my $passgen = Crypt::YAPassGen->new( post_subs => [ "caps", "digits" ] );
+                    my $password = $passgen->generate();
+                    $passgen->length(16);
+                    # uploaded_file_id
+                    # $dbh->do( "
+                    #     INSERT INTO $checkouts_table (id, password, issue_id, uploaded_file_id)
+                    #      VALUES (?, ?, ?, ?)", $uuid, bcrypt($password, '2b', 10, $passgen->generate()), $issue->{issue_id}, $encrypted_file->{id} );
+                    warn C4::Context->dbh->errstr;
+                    $dbh->commit;
+                    $dbh->{AutoCommit} = 1;
 
                     if ( $hold_existed ) {
                         # my $dtf = Koha::Database->new->schema->storage->datetime_parser;
@@ -365,8 +384,7 @@ sub ebookcheckout {
 
                 # }
 
-                return;
-                # TODO: implement
+                return ( {}, {}, ( "uuid" => $uuid, "password" => $password ) );
             }
             return ( { "NO_PRIVATE_EBOOK" => 1 } );
         }
