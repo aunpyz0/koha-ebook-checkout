@@ -255,31 +255,6 @@ sub opacuser {
     $self->output_html( $template->output(), $session ? 200 : 401 );
 }
 
-# TODO: remove
-sub issuable {
-    my ( $self, $barcode ) = @_;
-    my $cgi = $self->{cgi};
-
-    my $session = $self->_getsession();
-    if ( $session ) {
-        my $borrower;
-        my $cardnumber = $session->param("cardnumber");
-        if ( $cardnumber ) {
-            $borrower = Koha::Patrons->find( { cardnumber => $cardnumber } );
-            $borrower = $borrower->unblessed if $borrower;
-        }
-
-        return CanBookBeIssued(
-            $borrower,
-            $barcode,
-            undef,
-            0,
-            C4::Context->preference("AllowItemsOnHoldCheckoutSCO")
-        );
-    }
-    return ( { "UNAUTHORIZED" => 1 } );
-}
-
 sub ebookcheckout {
     my ( $self, $barcode ) = @_;
     my $cgi = $self->{cgi};
