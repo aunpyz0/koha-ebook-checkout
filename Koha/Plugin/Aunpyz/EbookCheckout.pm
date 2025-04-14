@@ -63,11 +63,23 @@ sub install() {
 
     # TODO: customize marc_tag_structure to have tag 857
     # TODO: customize marc_subfield_structure to have tagsubfield u for tagfield 857
+    my $checkout_table = $self->get_qualified_table_name('checkout');
     my @installer_statements = (
         q { INSERT INTO columns_settings (module,page,tablename,columnname,cannot_be_toggled,is_hidden) VALUES
          ('opac','biblio-detail','holdingst','item_barcode',0,0) ON DUPLICATE KEY UPDATE is_hidden=0, cannot_be_toggled=0; },
         q { INSERT INTO koha_cts.borrower_attribute_types (code,description,`repeatable`,unique_id,opac_display,opac_editable,staff_searchable,authorised_value_category,display_checkout,category_code,class) VALUES
          ('SHOW_BCODE','Show Barcode',0,0,0,0,0,'',0,NULL,'') ON DUPLICATE KEY UPDATE code=code; },
+        qq { CREATE TABLE IF NOT EXISTS $checkout_table (
+            `id` varchar(36) NOT NULL,
+            `password` varchar(255) NOT NULL,
+            `issue_id` int(11) NOT NULL,
+            `uploaded_file_id` int(11) NOT NULL,
+            PRIMARY KEY (`id`),
+            CONSTRAINT FOREIGN KEY (`issue_id`) REFERENCES issues (`issue_id`)
+                ON DELETE CASCADE,
+            CONSTRAINT FOREIGN KEY (`uploaded_file_id`) REFERENCES uploaded_files (`id`)
+                ON DELETE CASCADE
+         ) ENGINE = INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci; },
     );
     for ( @installer_statements ) {
         my $sth = C4::Context->dbh->prepare( $_ );
@@ -122,6 +134,8 @@ sub uninstall() {
 
     # TODO: remove all tagfield 857 from marc_subfield_structure
     # TODO: remove tag 857 from marc_tag_structure
+    my $checkout_table = $self->get_qualified_table_name('checkout');
+    C4::Context->dbh->do("DROP TABLE $checkout_table") or die;
 
     my $opacuserjs = $self->_prepareopacuserjs();
     C4::Context->set_preference( 'opacuserjs', $opacuserjs );
