@@ -71,14 +71,16 @@ sub new {
 sub install() {
     my ( $self, $args ) = @_;
 
-    # TODO: customize marc_tag_structure to have tag 857
-    # TODO: customize marc_subfield_structure to have tagsubfield u for tagfield 857
     my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
     my $files_table = $self->get_qualified_table_name($files_table);
     my @installer_statements = (
+        q { INSERT INTO marc_tag_structure (tagfield,liblibrarian,libopac,`repeatable`,mandatory,authorised_value,frameworkcode) VALUES 
+         ('857','PRIVATE EBOOK URL','PRIVATE EBOOK URL',0,0,'','') ON DUPLICATE KEY UPDATE tagfield=tagfield,frameworkcode=frameworkcode; },
+        q { INSERT INTO marc_subfield_structure (tagfield,tagsubfield,liblibrarian,libopac,`repeatable`,mandatory,kohafield,tab,authorised_value,authtypecode,value_builder,isurl,hidden,frameworkcode,seealso,link,defaultvalue,maxlength) VALUES
+         ('857','u','Uniform Resource Identifier','Uniform Resource Identifier',0,0,'biblioitems.url',8,'','','upload.pl',1,4,'',NULL,'','',9999) ON DUPLICATE KEY UPDATE tagfield=tagfield; },
         q { INSERT INTO columns_settings (module,page,tablename,columnname,cannot_be_toggled,is_hidden) VALUES
          ('opac','biblio-detail','holdingst','item_barcode',0,0) ON DUPLICATE KEY UPDATE is_hidden=0, cannot_be_toggled=0; },
-        q { INSERT INTO koha_cts.borrower_attribute_types (code,description,`repeatable`,unique_id,opac_display,opac_editable,staff_searchable,authorised_value_category,display_checkout,category_code,class) VALUES
+        q { INSERT INTO borrower_attribute_types (code,description,`repeatable`,unique_id,opac_display,opac_editable,staff_searchable,authorised_value_category,display_checkout,category_code,class) VALUES
          ('SHOW_BCODE','Show Barcode',0,0,0,0,0,'',0,NULL,'') ON DUPLICATE KEY UPDATE code=code; },
         qq { CREATE TABLE IF NOT EXISTS $checkouts_table (
             `uuid` varchar(36) NOT NULL,
@@ -155,6 +157,8 @@ sub uninstall() {
     my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
     my $files_table = $self->get_qualified_table_name($files_table);
     my @uninstaller_statements = (
+        q { DELETE FROM marc_tag_structure WHERE tagfield=857; },
+        q { DELETE FROM marc_subfield_structure WHERE tagfield=857; },
         qq { DROP TABLE IF EXISTS $files_table; },
         qq { DROP TABLE IF EXISTS $checkouts_table; },
     );
