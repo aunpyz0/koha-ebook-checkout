@@ -6,6 +6,9 @@ use XML::Simple;
 use Crypt::Bcrypt qw( bcrypt bcrypt_check );
 use Crypt::YAPassGen;
 use UUID qw ( uuid );
+use Try::Tiny;
+use File::Path qw ( make_path remove_tree );
+use IO::File;
 
 use base qw( Koha::Plugins::Base );
 
@@ -43,6 +46,10 @@ our $metadata = {
 
 ## Table names
 our $checkouts_table = 'checkouts';
+our $files_table = 'files';
+
+## Upload path
+our $upload_path = 'plugin_ebook_checkout';
 
 ## This is the minimum code required for a plugin's 'new' method
 ## More can be added, but none should be removed
@@ -67,20 +74,26 @@ sub install() {
     # TODO: customize marc_tag_structure to have tag 857
     # TODO: customize marc_subfield_structure to have tagsubfield u for tagfield 857
     my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
+    my $files_table = $self->get_qualified_table_name($files_table);
     my @installer_statements = (
         q { INSERT INTO columns_settings (module,page,tablename,columnname,cannot_be_toggled,is_hidden) VALUES
          ('opac','biblio-detail','holdingst','item_barcode',0,0) ON DUPLICATE KEY UPDATE is_hidden=0, cannot_be_toggled=0; },
         q { INSERT INTO koha_cts.borrower_attribute_types (code,description,`repeatable`,unique_id,opac_display,opac_editable,staff_searchable,authorised_value_category,display_checkout,category_code,class) VALUES
          ('SHOW_BCODE','Show Barcode',0,0,0,0,0,'',0,NULL,'') ON DUPLICATE KEY UPDATE code=code; },
         qq { CREATE TABLE IF NOT EXISTS $checkouts_table (
-            `id` varchar(36) NOT NULL,
+            `uuid` varchar(36) NOT NULL,
             `password` varchar(255) NOT NULL,
             `issue_id` int(11) NOT NULL,
-            `uploaded_file_id` int(11) NOT NULL,
-            PRIMARY KEY (`id`),
+            PRIMARY KEY (`uuid`),
             CONSTRAINT FOREIGN KEY (`issue_id`) REFERENCES issues (`issue_id`)
-                ON DELETE CASCADE,
-            CONSTRAINT FOREIGN KEY (`uploaded_file_id`) REFERENCES uploaded_files (`id`)
+                ON DELETE CASCADE
+         ) ENGINE = INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci; },
+        qq { CREATE TABLE IF NOT EXISTS $files_table (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `filename` varchar(255) NOT NULL,
+            `checkout_uuid` varchar(36) NOT NULL,
+            PRIMARY KEY (`id`),
+            CONSTRAINT FOREIGN KEY (`checkout_uuid`) REFERENCES $checkouts_table (`uuid`)
                 ON DELETE CASCADE
          ) ENGINE = INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci; },
     );
@@ -88,6 +101,8 @@ sub install() {
         my $sth = C4::Context->dbh->prepare( $_ );
         $sth->execute or die C4::Context->dbh->errstr;
     }
+
+    make_path( $self->_dir() );
 
     my $opacuserjs = $self->_prepareopacuserjs();
 
@@ -138,10 +153,20 @@ sub uninstall() {
     # TODO: remove all tagfield 857 from marc_subfield_structure
     # TODO: remove tag 857 from marc_tag_structure
     my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
-    C4::Context->dbh->do("DROP TABLE IF EXISTS $checkouts_table") or die;
+    my $files_table = $self->get_qualified_table_name($files_table);
+    my @uninstaller_statements = (
+        qq { DROP TABLE IF EXISTS $files_table; },
+        qq { DROP TABLE IF EXISTS $checkouts_table; },
+    );
+    for ( @uninstaller_statements ) {
+        my $sth = C4::Context->dbh->prepare( $_ );
+        $sth->execute or die C4::Context->dbh->errstr;
+    }
 
     my $opacuserjs = $self->_prepareopacuserjs();
     C4::Context->set_preference( 'opacuserjs', $opacuserjs );
+
+    remove_tree( $self->_dir() );
 
     return 1;
 }
@@ -152,6 +177,12 @@ sub uninstall() {
 ## Koha database should be considered a tool
 sub tool {
     my ( $self, $args ) = @_;
+}
+
+sub _dir() {
+    my ( $self ) = @_;
+
+    return C4::Context->config('upload_path') . '/' . $upload_path;
 }
 
 sub _prepareopacuserjs() {
@@ -321,45 +352,55 @@ sub ebookcheckout {
                     }
                     my $dbh = C4::Context->dbh;
                     $dbh->{AutoCommit} = 0;
-                    my $issue = AddIssue( $borrower, $barcode );
-                    my $ebookfilerecord = $self->_getprivateebookfilerecord( $biblionumber );
-                    # TODO: copy ebookfilerecord
-                    # TODO: encrypt file
-                    my $fh = $ebookfilerecord->file_handle if $ebookfilerecord;
-                    # C4::Context->config('upload_path');
-
-                    my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
                     my $uuid = uuid();
-                    my $passgen = Crypt::YAPassGen->new( post_subs => [ "caps", "digits" ] );
-                    my $password = $passgen->generate();
-                    $passgen->length(16);
-                    # uploaded_file_id
-                    # $dbh->do( "
-                    #     INSERT INTO $checkouts_table (id, password, issue_id, uploaded_file_id)
-                    #      VALUES (?, ?, ?, ?)", $uuid, bcrypt($password, '2b', 10, $passgen->generate()), $issue->{issue_id}, $encrypted_file->{id} );
-                    warn C4::Context->dbh->errstr;
-                    $dbh->commit;
-                    $dbh->{AutoCommit} = 1;
+                    ( $impossible, my %checkout ) = try {
+                        my $issue = AddIssue( $borrower, $barcode );
+                        my $passgen = Crypt::YAPassGen->new( post_subs => [ "caps", "digits" ] );
+                        my $password = $passgen->generate();
+                        my $ebookfilerecord = $self->_getprivateebookfilerecord( $biblionumber );
+                        # TODO: encrypt file
+                        my $fh = $ebookfilerecord->file_handle if $ebookfilerecord or die { "OPEN_FILE_FAILED" => 1 };
+                        my $encryptfh = IO::File->new( $self->_dir() . "/$uuid", "w" ) or die { "CREATE_FILE_FAILED" => 1 };
+                        $encryptfh->binmode;
+                        while (read($fh, my $block, 16)) {
+                            print $encryptfh $block;
+                        }
+                        $encryptfh->close();
 
-                    if ( $hold_existed ) {
-                        # my $dtf = Koha::Database->new->schema->storage->datetime_parser;
-                        # $template->param(
-                        #     # If the hold existed before the check in, let's confirm that the charge line exists
-                        #     # Note that this should not be needed but since we do not have proper exception handling here we do it this way
-                        #     patron_has_hold_fee => Koha::Account::Lines->search(
-                        #         {
-                        #             borrowernumber => $borrower->{borrowernumber},
-                        #             accounttype    => 'Res',
-                        #             description    => 'Reserve Charge - ' . $item->biblio->title,
-                        #             date           => $dtf->format_date(dt_from_string)
-                        #         }
-                        #       )->count,
-                        # );
-                    }
+                        my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
+                        $passgen->length(16);
+                        $dbh->do( qq|INSERT INTO $checkouts_table (uuid, password, issue_id) VALUES (?, ?, ?)|, undef, $uuid, bcrypt($password, '2b', 10, $passgen->generate()), $issue->issue_id ) or die { "INSERT_CHECKOUT_FAILED" => 1 };
+                        my $files_table = $self->get_qualified_table_name($files_table);
+                        $dbh->do( qq|INSERT INTO $files_table (filename, checkout_uuid) VALUES (?, ?)|, undef, $ebookfilerecord->filename, $uuid ) or die { "INSERT_FILE_FAILED" => 1 };
+                        $dbh->commit;
+                        $dbh->{AutoCommit} = 1;
 
+                        if ( $hold_existed ) {
+                            # my $dtf = Koha::Database->new->schema->storage->datetime_parser;
+                            # $template->param(
+                            #     # If the hold existed before the check in, let's confirm that the charge line exists
+                            #     # Note that this should not be needed but since we do not have proper exception handling here we do it this way
+                            #     patron_has_hold_fee => Koha::Account::Lines->search(
+                            #         {
+                            #             borrowernumber => $borrower->{borrowernumber},
+                            #             accounttype    => 'Res',
+                            #             description    => 'Reserve Charge - ' . $item->biblio->title,
+                            #             date           => $dtf->format_date(dt_from_string)
+                            #         }
+                            #       )->count,
+                            # );
+                        }
+
+                        return ( {}, ( "uuid" => $uuid, "password" => $password ) );
+                    } catch {
+                        $dbh->rollback;
+                        $dbh->{AutoCommit} = 1;
+                        unlink $self->_dir() . "/$uuid";
+                        # TODO: return meaningful error
+                        return ( $_ );
+                    };
+                    return ( $impossible, $needconfirm, %checkout );
                 # }
-
-                return ( {}, {}, ( "uuid" => $uuid, "password" => $password ) );
             }
             return ( { "NO_PRIVATE_EBOOK" => 1 } );
         }
