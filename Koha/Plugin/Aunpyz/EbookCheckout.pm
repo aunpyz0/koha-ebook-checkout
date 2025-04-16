@@ -3,8 +3,6 @@ package Koha::Plugin::Aunpyz::EbookCheckout;
 use Modern::Perl;
 
 use XML::Simple;
-use Crypt::Bcrypt qw( bcrypt bcrypt_check );
-use Crypt::YAPassGen;
 use UUID qw ( uuid );
 use Try::Tiny;
 use File::Path qw ( make_path remove_tree );
@@ -46,7 +44,6 @@ our $metadata = {
 
 ## Table names
 our $checkouts_table = 'checkouts';
-our $files_table = 'files';
 
 ## Upload path
 our $upload_path = 'plugin_ebook_checkout';
@@ -72,7 +69,6 @@ sub install() {
     my ( $self, $args ) = @_;
 
     my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
-    my $files_table = $self->get_qualified_table_name($files_table);
     my @installer_statements = (
         q { INSERT INTO marc_tag_structure (tagfield,liblibrarian,libopac,`repeatable`,mandatory,authorised_value,frameworkcode) VALUES 
          ('857','PRIVATE EBOOK URL','PRIVATE EBOOK URL',0,0,'','') ON DUPLICATE KEY UPDATE tagfield=tagfield,frameworkcode=frameworkcode; },
@@ -84,18 +80,10 @@ sub install() {
          ('SHOW_BCODE','Show Barcode',0,0,0,0,0,'',0,NULL,'') ON DUPLICATE KEY UPDATE code=code; },
         qq { CREATE TABLE IF NOT EXISTS $checkouts_table (
             `uuid` varchar(36) NOT NULL,
-            `password` varchar(255) NOT NULL,
+            `filename` varchar(255) NOT NULL,
             `issue_id` int(11) NOT NULL,
             PRIMARY KEY (`uuid`),
             CONSTRAINT FOREIGN KEY (`issue_id`) REFERENCES issues (`issue_id`)
-                ON DELETE CASCADE
-         ) ENGINE = INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci; },
-        qq { CREATE TABLE IF NOT EXISTS $files_table (
-            `id` int(11) NOT NULL AUTO_INCREMENT,
-            `filename` varchar(255) NOT NULL,
-            `checkout_uuid` varchar(36) NOT NULL,
-            PRIMARY KEY (`id`),
-            CONSTRAINT FOREIGN KEY (`checkout_uuid`) REFERENCES $checkouts_table (`uuid`)
                 ON DELETE CASCADE
          ) ENGINE = INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci; },
     );
@@ -155,11 +143,9 @@ sub uninstall() {
     # TODO: remove all tagfield 857 from marc_subfield_structure
     # TODO: remove tag 857 from marc_tag_structure
     my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
-    my $files_table = $self->get_qualified_table_name($files_table);
     my @uninstaller_statements = (
         q { DELETE FROM marc_tag_structure WHERE tagfield=857; },
         q { DELETE FROM marc_subfield_structure WHERE tagfield=857; },
-        qq { DROP TABLE IF EXISTS $files_table; },
         qq { DROP TABLE IF EXISTS $checkouts_table; },
     );
     for ( @uninstaller_statements ) {
@@ -359,8 +345,6 @@ sub ebookcheckout {
                     my $uuid = uuid();
                     ( $impossible, my %checkout ) = try {
                         my $issue = AddIssue( $borrower, $barcode );
-                        my $passgen = Crypt::YAPassGen->new( post_subs => [ "caps", "digits" ] );
-                        my $password = $passgen->generate();
                         my $ebookfilerecord = $self->_getprivateebookfilerecord( $biblionumber );
                         # TODO: encrypt file
                         my $fh = $ebookfilerecord->file_handle if $ebookfilerecord or die { "OPEN_FILE_FAILED" => 1 };
@@ -372,10 +356,7 @@ sub ebookcheckout {
                         $encryptfh->close();
 
                         my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
-                        $passgen->length(16);
-                        $dbh->do( qq|INSERT INTO $checkouts_table (uuid, password, issue_id) VALUES (?, ?, ?)|, undef, $uuid, bcrypt($password, '2b', 10, $passgen->generate()), $issue->issue_id ) or die { "INSERT_CHECKOUT_FAILED" => 1 };
-                        my $files_table = $self->get_qualified_table_name($files_table);
-                        $dbh->do( qq|INSERT INTO $files_table (filename, checkout_uuid) VALUES (?, ?)|, undef, $ebookfilerecord->filename, $uuid ) or die { "INSERT_FILE_FAILED" => 1 };
+                        $dbh->do( qq|INSERT INTO $checkouts_table (uuid, filename, issue_id) VALUES (?, ?, ?)|, undef, $uuid, $ebookfilerecord->filename, $issue->issue_id ) or die { "INSERT_CHECKOUT_FAILED" => $dbh->errstr };
                         $dbh->commit;
                         $dbh->{AutoCommit} = 1;
 
@@ -395,7 +376,7 @@ sub ebookcheckout {
                             # );
                         }
 
-                        return ( {}, ( "uuid" => $uuid, "password" => $password ) );
+                        return ( {}, ( "uuid" => $uuid ) );
                     } catch {
                         $dbh->rollback;
                         $dbh->{AutoCommit} = 1;
@@ -409,6 +390,26 @@ sub ebookcheckout {
             return ( { "NO_PRIVATE_EBOOK" => 1 } );
         }
         return ( { "UNKNOWN_BARCODE" => 1 } );
+    }
+    return ( { "UNAUTHORIZED" => 1 } );
+}
+
+sub getebookfilehandle {
+    my ( $self, $uuid ) = @_;
+    my $cgi = $self->{cgi};
+
+    my $session = $self->_getsession();
+    if ( $session ) {
+        my ( $error, $fh ) = try {
+            my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
+            my $checkout = C4::Context->dbh->selectrow_hashref( qq|SELECT uuid FROM $checkouts_table WHERE uuid=?|, undef, $uuid ) or die ( { "CHECKOUT_NOT_FOUND" => 1 } );
+            my $fh = IO::File->new( $self->_dir() . "/$uuid", "r" ) or die ( { "OPEN_FILE_FAILED" => $! } );
+            $fh->binmode;
+            return ( {}, $fh );
+        } catch {
+            return ( $_ );
+        };
+        return ( $error, $fh );
     }
     return ( { "UNAUTHORIZED" => 1 } );
 }
