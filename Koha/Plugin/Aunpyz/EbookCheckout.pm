@@ -273,7 +273,25 @@ sub opacuser {
         loggedin => $session ? 1 : 0,
     );
 
-    $self->output_html( $template->output(), $session ? 200 : 401 );
+    $self->output_html( $template->output() );
+}
+
+sub getlinks {
+    my ( $self ) = @_;
+    my $cgi = $self->{cgi};
+
+    my $session = $self->_getsession();
+    if ( $session ) {
+        my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
+        my $checkouts = C4::Context->dbh->selectall_arrayref( qq|
+            SELECT co.uuid, it.barcode FROM items it
+            INNER JOIN issues iss ON iss.itemnumber=it.itemnumber
+            INNER JOIN $checkouts_table co ON co.issue_id=iss.issue_id
+            WHERE iss.borrowernumber=?;
+        |, { Slice => {} }, $session->param("number") );
+        return ( {}, $checkouts );
+    }
+    return ( { "UNAUTHORIZED" => 1 } );
 }
 
 sub ebookcheckout {
