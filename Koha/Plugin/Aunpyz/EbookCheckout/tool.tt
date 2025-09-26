@@ -1,0 +1,35 @@
+[% INCLUDE 'doc-head-open.inc' %]
+<title>Koha Plugin: Ebook Checkout</title>
+[% INCLUDE 'doc-head-close.inc' %]
+</head>
+<body id="about_about" class="about">
+[% INCLUDE 'header.inc' %]
+[% INCLUDE 'cat-search.inc' %]
+<div id="breadcrumbs">
+    <a href="/cgi-bin/koha/mainpage.pl">Home</a>
+    &rsaquo;
+    <a href="/cgi-bin/koha/plugins/plugins-home.pl">Plugins</a>
+    &rsaquo;
+    Ebook Checkout &rsaquo; Tool
+</div>
+<div id="doc2">
+    <form class="form-horizontal" action="/cgi-bin/koha/plugins/run.pl" method="post">
+        <input type="hidden" name="class" value="[% CLASS %]"/>
+        <input type="hidden" name="method" value="[% METHOD %]"/>
+
+        <div class="form-group">
+            <label for="hostname" class="col-sm-2 control-label">Hostname for reader website:</label>
+            <div class="col-sm-5">
+                <input class="form-control" type="url" name="hostname" value="[% hostname | html %] "/>
+            </div>
+            <p class="help-block">Left blank for the same hostname as OPAC hostname</p>
+        </div>
+
+        <div class="form-group">
+            <div class="col-sm-offset-2 col-sm-10">
+                <button type="submit" class="btn btn-default">Update</button>
+            </div>
+        </div>
+    </form>
+</div>
+[% INCLUDE 'intranet-bottom.inc' %]

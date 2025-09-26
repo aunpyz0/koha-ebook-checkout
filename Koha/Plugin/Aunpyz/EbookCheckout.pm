@@ -44,6 +44,7 @@ our $metadata = {
 
 ## Table names
 our $checkouts_table = 'checkouts';
+our $config_table = 'config';
 
 ## Upload path
 our $upload_path = 'plugin_ebook_checkout';
@@ -69,6 +70,10 @@ sub install() {
     my ( $self, $args ) = @_;
 
     my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
+    my $config_table = $self->get_qualified_table_name($config_table);
+    my $hostname = C4::Context->preference('OPACBaseURL');
+    my $quoted_hostname = C4::Context->dbh->quote($hostname);
+
     my @installer_statements = (
         q { INSERT INTO marc_tag_structure (tagfield,liblibrarian,libopac,`repeatable`,mandatory,authorised_value,frameworkcode) VALUES 
          ('857','PRIVATE EBOOK URL','PRIVATE EBOOK URL',0,0,'','') ON DUPLICATE KEY UPDATE tagfield=tagfield,frameworkcode=frameworkcode; },
@@ -86,6 +91,12 @@ sub install() {
             CONSTRAINT FOREIGN KEY (`issue_id`) REFERENCES issues (`issue_id`)
                 ON DELETE CASCADE
          ) ENGINE = INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci; },
+        qq { CREATE TABLE IF NOT EXISTS $config_table (
+            `name` varchar(255) NOT NULL,
+            `value` text,
+            PRIMARY KEY (`name`)
+        ) ENGINE = INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci; },
+        qq { INSERT INTO $config_table (name, value) VALUES ('HOST_NAME', $quoted_hostname) },
     );
     for ( @installer_statements ) {
         my $sth = C4::Context->dbh->prepare( $_ );
@@ -143,10 +154,12 @@ sub uninstall() {
     # TODO: remove all tagfield 857 from marc_subfield_structure
     # TODO: remove tag 857 from marc_tag_structure
     my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
+    my $config_table = $self->get_qualified_table_name($config_table);
     my @uninstaller_statements = (
         q { DELETE FROM marc_tag_structure WHERE tagfield=857; },
         q { DELETE FROM marc_subfield_structure WHERE tagfield=857; },
         qq { DROP TABLE IF EXISTS $checkouts_table; },
+        qq { DROP TABLE IF EXISTS $config_table; },
     );
     for ( @uninstaller_statements ) {
         my $sth = C4::Context->dbh->prepare( $_ );
@@ -167,6 +180,36 @@ sub uninstall() {
 ## Koha database should be considered a tool
 sub tool {
     my ( $self, $args ) = @_;
+    my $cgi = $self->{cgi};
+
+    unless ( $cgi->param('hostname') ) {
+        $self->_toolstep1();
+    } else {
+        $self->_toolstep2();
+    }
+}
+
+sub _toolstep1 {
+    my ( $self, $args ) = @_;
+
+    my $config_table = $self->get_qualified_table_name($config_table);
+    my $hostname = C4::Context->dbh->selectrow_hashref( qq| SELECT value FROM $config_table WHERE name = 'HOST_NAME' | ) or die "Could not find HOST_NAME in config table";
+    my $template = $self->get_template({ file => 'tool.tt' });
+    $template->param( hostname => $hostname->{value} );
+
+    $self->output_html( $template->output() );
+}
+
+sub _toolstep2 {
+    my ( $self, $args ) = @_;
+    my $cgi = $self->{'cgi'};
+
+    my $hostname = $cgi->param('hostname');
+    my $config_table = $self->get_qualified_table_name($config_table);
+    my $sth = C4::Context->dbh->prepare( qq| UPDATE $config_table SET value = ? WHERE name = 'HOST_NAME' | );
+    $sth->execute($hostname) or die "Could not update HOST_NAME in config table";
+
+    $self->_toolstep1();
 }
 
 sub _dir() {
@@ -283,10 +326,12 @@ sub getlinks {
     my $session = $self->_getsession();
     if ( $session ) {
         my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
+        my $config_table = $self->get_qualified_table_name($config_table);
         my $checkouts = C4::Context->dbh->selectall_arrayref( qq|
-            SELECT co.uuid, it.barcode FROM items it
+            SELECT CONCAT(conf.value, '/', co.uuid) as link, it.barcode FROM items it
             INNER JOIN issues iss ON iss.itemnumber=it.itemnumber
             INNER JOIN $checkouts_table co ON co.issue_id=iss.issue_id
+            LEFT JOIN $config_table conf ON conf.name = 'HOST_NAME'
             WHERE iss.borrowernumber=?;
         |, { Slice => {} }, $session->param("number") );
         return ( {}, $checkouts );
