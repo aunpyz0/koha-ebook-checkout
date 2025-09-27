@@ -1,0 +1,3 @@
+[submodule "reader"]
+	path = reader
+	url = git@bitbucket.org:aunpyz_freelance/cts-e-reader.git
