@@ -487,23 +487,23 @@ sub unlock {
 }
 
 sub getebookfilehandle {
-    my ( $self, $uuid ) = @_;
+    my ( $self, $uuid, $access_token ) = @_;
     my $cgi = $self->{cgi};
 
-    my $session = $self->_getsession();
-    if ( $session ) {
-        my ( $error, $fh ) = try {
-            my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
-            my $checkout = C4::Context->dbh->selectrow_hashref( qq|SELECT uuid FROM $checkouts_table WHERE uuid=?|, undef, $uuid ) or die ( { "CHECKOUT_NOT_FOUND" => 1 } );
-            my $fh = IO::File->new( $self->_dir() . "/$uuid", "r" ) or die ( { "OPEN_FILE_FAILED" => $! } );
-            $fh->binmode;
-            return ( {}, $fh );
-        } catch {
-            return ( $_ );
-        };
-        return ( $error, $fh );
-    }
-    return ( { "UNAUTHORIZED" => 1 } );
+    my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
+    my $checkout = C4::Context->dbh->selectrow_hashref( qq|SELECT uuid FROM $checkouts_table WHERE uuid=? AND access_token=?|, undef, $uuid, $access_token );
+
+    return ( { "UNAUTHORIZED" => 1 } ) unless $checkout;
+
+    my ( $error, $fh ) = try {
+        # TODO: encrypt file with private key
+        my $fh = IO::File->new( $self->_dir() . "/$uuid", "r" ) or die ( { "OPEN_FILE_FAILED" => $! } );
+        $fh->binmode;
+        return ( {}, $fh );
+    } catch {
+        return ( $_ );
+    };
+    return ( $error, $fh );
 }
 
 1;

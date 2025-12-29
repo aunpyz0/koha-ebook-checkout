@@ -14,8 +14,10 @@ my $cgi = new CGI;
 
 my $ebookcheckout = Koha::Plugin::Aunpyz::EbookCheckout->new({ cgi => $cgi });
 
-my $uuid = $cgi->param("uuid") || '';
-my ( $error, $ebookfh ) = $ebookcheckout->getebookfilehandle( $uuid );
+my $uuid = $cgi->param("uuid");
+my $access_token = $cgi->http('X-Access');
+
+my ( $error, $ebookfh ) = $ebookcheckout->getebookfilehandle( $uuid, $access_token );
 
 if ( scalar keys %$error ) {
 	if ( $error->{UNAUTHORIZED} ) {
