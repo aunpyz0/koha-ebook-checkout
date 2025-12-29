@@ -7,6 +7,7 @@ use UUID qw ( uuid );
 use Try::Tiny;
 use File::Path qw ( make_path remove_tree );
 use IO::File;
+use Crypt::Argon2 qw( argon2id_pass argon2id_verify );
 
 use base qw( Koha::Plugins::Base );
 
@@ -87,7 +88,10 @@ sub install() {
             `uuid` varchar(36) NOT NULL,
             `filename` varchar(255) NOT NULL,
             `issue_id` int(11) NOT NULL,
+            `password` text NOT NULL,
+            `access_token` text NULL,
             PRIMARY KEY (`uuid`),
+            INDEX `access_idx` (`access_token`, `uuid`),
             CONSTRAINT FOREIGN KEY (`issue_id`) REFERENCES issues (`issue_id`)
                 ON DELETE CASCADE
          ) ENGINE = INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci; },
@@ -406,6 +410,16 @@ sub ebookcheckout {
                     my $dbh = C4::Context->dbh;
                     $dbh->{AutoCommit} = 0;
                     my $uuid = uuid();
+
+                    my @chars = ('0'..'9', 'A'..'Z', 'a'..'z');
+                    # my $password = join "", map { $chars[rand @chars] } 1..8;
+                    my $password = "P\@ssw0rd";
+                    my $salt;
+                    open(my $fh, "<", "/dev/urandom") or die "Cannot open /dev/urandom";
+                    read($fh, $salt, 16);
+                    close($fh);
+                    my $password_hash = argon2id_pass($password, $salt, 3, '32M', 1, 16);
+                    
                     ( $impossible, my %checkout ) = try {
                         my $issue = AddIssue( $borrower, $barcode );
                         my $ebookfilerecord = $self->_getprivateebookfilerecord( $biblionumber );
@@ -419,7 +433,7 @@ sub ebookcheckout {
                         $encryptfh->close();
 
                         my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
-                        $dbh->do( qq|INSERT INTO $checkouts_table (uuid, filename, issue_id) VALUES (?, ?, ?)|, undef, $uuid, $ebookfilerecord->filename, $issue->issue_id ) or die { "INSERT_CHECKOUT_FAILED" => $dbh->errstr };
+                        $dbh->do( qq|INSERT INTO $checkouts_table (uuid, filename, issue_id, password) VALUES (?, ?, ?, ?)|, undef, $uuid, $ebookfilerecord->filename, $issue->issue_id, $password_hash ) or die { "INSERT_CHECKOUT_FAILED" => $dbh->errstr };
                         $dbh->commit;
                         $dbh->{AutoCommit} = 1;
 
@@ -439,7 +453,7 @@ sub ebookcheckout {
                             # );
                         }
 
-                        return ( {}, ( "uuid" => $uuid ) );
+                        return ( {}, ( "uuid" => $uuid, "password" => $password ) );
                     } catch {
                         $dbh->rollback;
                         $dbh->{AutoCommit} = 1;
@@ -455,6 +469,21 @@ sub ebookcheckout {
         return ( { "UNKNOWN_BARCODE" => 1 } );
     }
     return ( { "UNAUTHORIZED" => 1 } );
+}
+
+sub unlock {
+    my ( $self, $uuid, $password ) = @_;
+    my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
+    my $checkout = C4::Context->dbh->selectrow_hashref( qq|SELECT password FROM $checkouts_table WHERE uuid=?|, undef, $uuid );
+
+    return { "CHECKOUT_NOT_FOUND" => 1 } unless $checkout;
+    return { "INVALID_PASSWORD" => 1 } unless argon2id_verify( $checkout->{password}, $password );
+
+    my $access_token = uuid();
+
+    C4::Context->dbh->do( qq|UPDATE $checkouts_table SET access_token=? WHERE uuid=?|, undef, $access_token, $uuid ) or die "Failed to update access_token in $checkouts_table";
+
+    return ( {}, $access_token );
 }
 
 sub getebookfilehandle {
