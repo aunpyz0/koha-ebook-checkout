@@ -27,6 +27,7 @@ use Koha::Patron::Images;
 use Koha::Patron::Messages;
 use Koha::Token;
 use Koha::UploadedFiles;
+use Koha::Checkouts;
 
 ## Here we set our plugin version
 our $VERSION = '0.0.1';
@@ -482,9 +483,11 @@ sub getebookfilehandle {
     my $cgi = $self->{cgi};
 
     my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
-    my $checkout = C4::Context->dbh->selectrow_hashref( qq|SELECT access_token, file_hashvalue FROM $checkouts_table WHERE uuid=?|, undef, $uuid );
+    my $checkout = C4::Context->dbh->selectrow_hashref( qq|SELECT access_token, file_hashvalue, issue_id FROM $checkouts_table WHERE uuid=?|, undef, $uuid );
 
     return ( { "CHECKOUT_NOT_FOUND" => 1 } ) unless $checkout;
+    my $issue = Koha::Checkouts->find( { issue_id => $checkout->{issue_id} } );
+    return ( { "OVERDUE" => 1 }) if $issue->is_overdue;
     return ( { "INVALID_TOKEN" => 1 } ) unless $checkout->{access_token} eq $access_token;
     
     my ( $error, $fh ) = try {
