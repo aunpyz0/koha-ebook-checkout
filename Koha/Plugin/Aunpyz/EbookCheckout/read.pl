@@ -22,19 +22,12 @@ my $access_token = $cgi->http('X-Access');
 my ( $error, $ebookfh ) = $ebookcheckout->getebookfilehandle( $uuid, $access_token );
 
 if ( scalar keys %$error ) {
-	if ( $error->{UNAUTHORIZED} ) {
-		print $cgi->header(
-			{
-				-status => 401
-			});
-	} else {
-		print $cgi->header(
-			{
-				-status => 400,
-				-type => "application/json",
-			});
-		print to_json( $error );
-	}
+	print $cgi->header(
+		{
+			-status => 400,
+			-type => "application/json",
+		});
+	print to_json( $error );
 } else {
 	print $cgi->header(
 		{

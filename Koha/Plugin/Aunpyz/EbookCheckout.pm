@@ -491,9 +491,10 @@ sub getebookfilehandle {
     my $cgi = $self->{cgi};
 
     my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
-    my $checkout = C4::Context->dbh->selectrow_hashref( qq|SELECT uuid FROM $checkouts_table WHERE uuid=? AND access_token=?|, undef, $uuid, $access_token );
+    my $checkout = C4::Context->dbh->selectrow_hashref( qq|SELECT access_token FROM $checkouts_table WHERE uuid=?|, undef, $uuid );
 
-    return ( { "UNAUTHORIZED" => 1 } ) unless $checkout;
+    return ( { "CHECKOUT_NOT_FOUND" => 1 } ) unless $checkout;
+    return ( { "INVALID_TOKEN" => 1 } ) unless $checkout->{access_token} eq $access_token;
 
     my ( $error, $fh ) = try {
         my $fh = IO::File->new( $self->_dir() . "/$uuid", "r" ) or die ( { "OPEN_FILE_FAILED" => $! } );
