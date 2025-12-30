@@ -4,6 +4,8 @@ use Modern::Perl;
 
 use CGI qw ( -utf8 );
 use JSON;
+use Crypt::CBC;
+use Digest::SHA qw(sha256);
 
 use C4::Context;
 use lib C4::Context->config("pluginsdir");
@@ -37,10 +39,29 @@ if ( scalar keys %$error ) {
 	print $cgi->header(
 		{
 			-status => 200,
-			-type => "application/pdf",
+			-type => "application/octet-stream",
 		});
-    while( <$ebookfh> ) {
-        print $_;
-    }
+	my $password = 'P@ssw0rd';
+	my $key = sha256($password);
+	my $iv = Crypt::CBC->random_bytes(16);
+	my $cipher = Crypt::CBC->new(
+		{
+			cipher      => 'Cipher::AES',
+			key         => $key,
+			iv          => $iv,
+			pbkdf		=> 'none',
+			header      => 'none',
+			keysize     => 32,
+			padding     => 'standard'
+		}
+	);
+
+	print $iv;
+	$cipher->start('encrypting');
+	my $buffer;
+	while ( read($ebookfh, $buffer, 4096) ) {
+	    print $cipher->crypt($buffer);
+	}
+    print $cipher->finish();
     $ebookfh->close;	
 }

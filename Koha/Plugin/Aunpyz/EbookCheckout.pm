@@ -496,7 +496,6 @@ sub getebookfilehandle {
     return ( { "UNAUTHORIZED" => 1 } ) unless $checkout;
 
     my ( $error, $fh ) = try {
-        # TODO: encrypt file with private key
         my $fh = IO::File->new( $self->_dir() . "/$uuid", "r" ) or die ( { "OPEN_FILE_FAILED" => $! } );
         $fh->binmode;
         return ( {}, $fh );

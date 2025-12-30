@@ -1,13 +1,14 @@
 # Required Perl Modules
 
-- Crypt::Mode::CBC
+- Crypt::CBC
 - Math::Random::Secure
 - Crypt::Argon2
+- Crypt::Cipher::AES
 
 ## Installation
 
 ```bash
-cpan Crypt::Mode::CBC Math::Random::Secure Crypt::Argon2
+cpan Crypt::CBC Math::Random::Secure Crypt::Argon2 Crypt::Cipher::AES
 ```
 
 # Required Debian Packages
