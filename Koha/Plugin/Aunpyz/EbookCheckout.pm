@@ -86,7 +86,7 @@ sub install() {
          ('SHOW_BCODE','Show Barcode',0,0,0,0,0,'',0,NULL,'') ON DUPLICATE KEY UPDATE code=code; },
         qq { CREATE TABLE IF NOT EXISTS $checkouts_table (
             `uuid` varchar(36) NOT NULL,
-            `filename` varchar(255) NOT NULL,
+            `file_hashvalue` varchar(255) NOT NULL,
             `issue_id` int(11) NOT NULL,
             `access_code` varchar(6) NOT NULL,
             `access_token` text NULL,
@@ -284,8 +284,14 @@ sub _getprivateebookfilerecord {
     my $ebookurl = $self->_getprivateebook( $biblionumber ) || '';
     my $hash = ( split( /\?id=/, $ebookurl ) )[1];
 
+    return $self->_getuploadedfile( $hash );
+}
+
+sub _getuploadedfile {
+    my ( $self, $hashvalue ) = @_;
+
     return Koha::UploadedFiles->search({
-        hashvalue => $hash,
+        hashvalue => $hashvalue,
         public => 1,
     })->next;
 }
@@ -416,18 +422,9 @@ sub ebookcheckout {
                     ( $impossible, my %checkout ) = try {
                         my $issue = AddIssue( $borrower, $barcode );
                         my $ebookfilerecord = $self->_getprivateebookfilerecord( $biblionumber );
-                        my $fh = $ebookfilerecord->file_handle if $ebookfilerecord or die { "OPEN_FILE_FAILED" => 1 };
-                        # TODO: since no pre-encryption is implemented, this can be removed
-                        # TODO2: this will affect getebookfilehandle sub
-                        my $encryptfh = IO::File->new( $self->_dir() . "/$uuid", "w" ) or die { "CREATE_FILE_FAILED" => 1 };
-                        $encryptfh->binmode;
-                        while (read($fh, my $block, 16)) {
-                            print $encryptfh $block;
-                        }
-                        $encryptfh->close();
 
                         my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
-                        $dbh->do( qq|INSERT INTO $checkouts_table (uuid, filename, issue_id, access_code) VALUES (?, ?, ?, ?)|, undef, $uuid, $ebookfilerecord->filename, $issue->issue_id, $access_code ) or die { "INSERT_CHECKOUT_FAILED" => $dbh->errstr };
+                        $dbh->do( qq|INSERT INTO $checkouts_table (uuid, file_hashvalue, issue_id, access_code) VALUES (?, ?, ?, ?)|, undef, $uuid, $ebookfilerecord->hashvalue, $issue->issue_id, $access_code ) or die { "INSERT_CHECKOUT_FAILED" => $dbh->errstr };
                         $dbh->commit;
                         $dbh->{AutoCommit} = 1;
 
@@ -485,13 +482,14 @@ sub getebookfilehandle {
     my $cgi = $self->{cgi};
 
     my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
-    my $checkout = C4::Context->dbh->selectrow_hashref( qq|SELECT access_token FROM $checkouts_table WHERE uuid=?|, undef, $uuid );
+    my $checkout = C4::Context->dbh->selectrow_hashref( qq|SELECT access_token, file_hashvalue FROM $checkouts_table WHERE uuid=?|, undef, $uuid );
 
     return ( { "CHECKOUT_NOT_FOUND" => 1 } ) unless $checkout;
     return ( { "INVALID_TOKEN" => 1 } ) unless $checkout->{access_token} eq $access_token;
-
+    
     my ( $error, $fh ) = try {
-        my $fh = IO::File->new( $self->_dir() . "/$uuid", "r" ) or die ( { "OPEN_FILE_FAILED" => $! } );
+        my $ebookfilerecord = $self->_getuploadedfile( $checkout->{file_hashvalue} );
+        my $fh = $ebookfilerecord->file_handle if $ebookfilerecord or die { "OPEN_FILE_FAILED" => 1 };
         $fh->binmode;
         return ( {}, $fh );
     } catch {
