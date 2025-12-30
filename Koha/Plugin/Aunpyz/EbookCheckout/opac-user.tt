@@ -14,12 +14,12 @@
                 url: '/ebook-checkout/links.pl?',
                 cache: false,
                 success: function(data) {
-                    const barcodesMap = data.reduce((barcodesMap, d) => ({ [d.barcode]: d.link, ...barcodesMap }), {})
+                    const barcodesMap = data.reduce((barcodesMap, d) => ({ [d.barcode]: { link: d.link, access_code: d.access_code }, ...barcodesMap }), {})
                     $table.find('tbody tr').each(function() {
                         const barcode = $(this).find('td.barcode').clone().children().remove().end().text().trim();
-                        const link = barcodesMap[barcode];
+                        const { link, access_code } = barcodesMap[barcode];
                         if (link) {
-                            $(this).find('td.read_link').append(`<a class="btn" href="${link}" target="_blank"><i class="icon-eye-open"></i> Read</a>`);
+                            $(this).find('td.read_link').append(`<div><a class="btn" href="${link}" target="_blank"><i class="icon-eye-open"></i> Read</a><div>Code: ${access_code}</div></div>`);
                         }
                     })
                 },

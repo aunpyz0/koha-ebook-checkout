@@ -88,10 +88,9 @@ sub install() {
             `uuid` varchar(36) NOT NULL,
             `filename` varchar(255) NOT NULL,
             `issue_id` int(11) NOT NULL,
-            `password` text NOT NULL,
+            `access_code` varchar(6) NOT NULL,
             `access_token` text NULL,
             PRIMARY KEY (`uuid`),
-            INDEX `access_idx` (`access_token`, `uuid`),
             CONSTRAINT FOREIGN KEY (`issue_id`) REFERENCES issues (`issue_id`)
                 ON DELETE CASCADE
          ) ENGINE = INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci; },
@@ -332,7 +331,7 @@ sub getlinks {
         my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
         my $config_table = $self->get_qualified_table_name($config_table);
         my $checkouts = C4::Context->dbh->selectall_arrayref( qq|
-            SELECT CONCAT(conf.value, '/', co.uuid) as link, it.barcode FROM items it
+            SELECT CONCAT(conf.value, '/', co.uuid) as link, co.access_code, it.barcode FROM items it
             INNER JOIN issues iss ON iss.itemnumber=it.itemnumber
             INNER JOIN $checkouts_table co ON co.issue_id=iss.issue_id
             LEFT JOIN $config_table conf ON conf.name = 'HOST_NAME'
@@ -412,19 +411,14 @@ sub ebookcheckout {
                     my $uuid = uuid();
 
                     my @chars = ('0'..'9', 'A'..'Z', 'a'..'z');
-                    # my $password = join "", map { $chars[rand @chars] } 1..8;
-                    my $password = "P\@ssw0rd";
-                    my $salt;
-                    open(my $fh, "<", "/dev/urandom") or die "Cannot open /dev/urandom";
-                    read($fh, $salt, 16);
-                    close($fh);
-                    my $password_hash = argon2id_pass($password, $salt, 3, '32M', 1, 16);
+                    my $access_code = join "", map { $chars[rand @chars] } 1..6;
                     
                     ( $impossible, my %checkout ) = try {
                         my $issue = AddIssue( $borrower, $barcode );
                         my $ebookfilerecord = $self->_getprivateebookfilerecord( $biblionumber );
-                        # TODO: encrypt file
                         my $fh = $ebookfilerecord->file_handle if $ebookfilerecord or die { "OPEN_FILE_FAILED" => 1 };
+                        # TODO: since no pre-encryption is implemented, this can be removed
+                        # TODO2: this will affect getebookfilehandle sub
                         my $encryptfh = IO::File->new( $self->_dir() . "/$uuid", "w" ) or die { "CREATE_FILE_FAILED" => 1 };
                         $encryptfh->binmode;
                         while (read($fh, my $block, 16)) {
@@ -433,7 +427,7 @@ sub ebookcheckout {
                         $encryptfh->close();
 
                         my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
-                        $dbh->do( qq|INSERT INTO $checkouts_table (uuid, filename, issue_id, password) VALUES (?, ?, ?, ?)|, undef, $uuid, $ebookfilerecord->filename, $issue->issue_id, $password_hash ) or die { "INSERT_CHECKOUT_FAILED" => $dbh->errstr };
+                        $dbh->do( qq|INSERT INTO $checkouts_table (uuid, filename, issue_id, access_code) VALUES (?, ?, ?, ?)|, undef, $uuid, $ebookfilerecord->filename, $issue->issue_id, $access_code ) or die { "INSERT_CHECKOUT_FAILED" => $dbh->errstr };
                         $dbh->commit;
                         $dbh->{AutoCommit} = 1;
 
@@ -453,7 +447,7 @@ sub ebookcheckout {
                             # );
                         }
 
-                        return ( {}, ( "uuid" => $uuid, "password" => $password ) );
+                        return ( {}, ( "uuid" => $uuid ) );
                     } catch {
                         $dbh->rollback;
                         $dbh->{AutoCommit} = 1;
@@ -472,12 +466,12 @@ sub ebookcheckout {
 }
 
 sub unlock {
-    my ( $self, $uuid, $password ) = @_;
+    my ( $self, $uuid, $access_code ) = @_;
     my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
-    my $checkout = C4::Context->dbh->selectrow_hashref( qq|SELECT password FROM $checkouts_table WHERE uuid=?|, undef, $uuid );
+    my $checkout = C4::Context->dbh->selectrow_hashref( qq|SELECT access_code FROM $checkouts_table WHERE uuid=?|, undef, $uuid );
 
     return { "CHECKOUT_NOT_FOUND" => 1 } unless $checkout;
-    return { "INVALID_PASSWORD" => 1 } unless argon2id_verify( $checkout->{password}, $password );
+    return { "INVALID_ACCESS_CODE" => 1 } unless $checkout->{access_code} eq $access_code;
 
     my $access_token = uuid();
 

@@ -13,9 +13,9 @@ use Koha::Plugin::Aunpyz::EbookCheckout;
 my $cgi = new CGI;
 my $ebookcheckout = Koha::Plugin::Aunpyz::EbookCheckout->new({ cgi => $cgi });
 my $uuid = $cgi->param('uuid');
-my $password = $cgi->param('password');
+my $code = $cgi->param('code');
 
-my ( $error, $access_token) = $ebookcheckout->unlock($uuid, $password);
+my ( $error, $access_token) = $ebookcheckout->unlock($uuid, $code);
 
 if ( scalar keys %$error ) {
     print $cgi->header(
