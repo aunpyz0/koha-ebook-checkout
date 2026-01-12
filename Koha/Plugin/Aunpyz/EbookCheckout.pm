@@ -501,4 +501,45 @@ sub getebookfilehandle {
     return ( $error, $fh );
 }
 
+sub expires {
+    my ( $self, $uuid ) = @_;
+    my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
+
+    my $date_due = C4::Context->dbh->selectrow_array( qq|
+        SELECT i.date_due
+        FROM issues i
+        JOIN $checkouts_table c ON c.issue_id = i.issue_id
+        WHERE c.uuid = ?
+    |, undef, $uuid );
+
+    return { "CHECKOUT_NOT_FOUND" => 1 } unless $date_due;
+
+    return ( {}, $date_due );
+}
+
+sub renewable {
+    my ( $self, $uuid ) = @_;
+    my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
+
+    my $checkout = C4::Context->dbh->selectrow_hashref( qq|
+        SELECT i.borrowernumber, i.itemnumber
+        FROM issues i
+        JOIN $checkouts_table c ON c.issue_id = i.issue_id
+        WHERE c.uuid = ?
+    |, undef, $uuid );
+
+    return { "CHECKOUT_NOT_FOUND" => 1 } unless $checkout;
+
+    my ( $renewable ) = C4::Circulation::CanBookBeRenewed(
+        $checkout->{borrowernumber},
+        $checkout->{itemnumber},
+    );
+
+    return ( {}, $renewable );
+}
+
+sub renew {
+    # TODO
+}
+
 1;
