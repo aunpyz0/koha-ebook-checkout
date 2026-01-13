@@ -514,19 +514,27 @@ sub expires {
 
     return { "CHECKOUT_NOT_FOUND" => 1 } unless $date_due;
 
-    return ( {}, $date_due );
+    return ( {}, dt_from_string($date_due, 'sql') );
 }
 
-sub renewable {
+sub _getcheckoutforrenewal {
     my ( $self, $uuid ) = @_;
     my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
 
     my $checkout = C4::Context->dbh->selectrow_hashref( qq|
-        SELECT i.borrowernumber, i.itemnumber
+        SELECT i.borrowernumber, i.itemnumber, i.branchcode
         FROM issues i
         JOIN $checkouts_table c ON c.issue_id = i.issue_id
         WHERE c.uuid = ?
     |, undef, $uuid );
+
+    return $checkout;
+}
+
+sub renewable {
+    my ( $self, $uuid ) = @_;
+
+    my $checkout = $self->_getcheckoutforrenewal($uuid);
 
     return { "CHECKOUT_NOT_FOUND" => 1 } unless $checkout;
 

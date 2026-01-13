@@ -31,5 +31,5 @@ if ( scalar keys %$error ) {
             -status => 200,
             -type => 'application/json'
         });
-    print to_json( { "DATE_DUE" => $date_due } );
+    print to_json( { "DATE_DUE" => $date_due->epoch } );
 }
