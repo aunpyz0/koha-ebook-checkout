@@ -34,9 +34,23 @@ if ( $method eq 'GET' ) {
             });
         print to_json( { "RENEWABLE" => $renewable } );
     }
-} elsif ( $method eq 'POST' ) {
-    my ( $error, $result ) = $ebookcheckout->renew($uuid);
-    # TODO
+} elsif ( $method eq 'PUT' ) {
+    my ( $error, $new_date_due, $renewable ) = $ebookcheckout->renew($uuid);
+    if ( scalar keys %$error ) {
+        print $cgi->header(
+            {
+                -status => 400,
+                -type => 'application/json'
+            });
+        print to_json( $error );
+    } else {
+        print $cgi->header(
+            {
+                -status => 200,
+                -type => 'application/json'
+            });
+        print to_json( { "DATE_DUE" => $new_date_due->epoch, "RENEWABLE" => $renewable } );
+    }
 } else {
     print $cgi->header(
         {

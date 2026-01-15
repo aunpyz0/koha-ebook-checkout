@@ -547,7 +547,31 @@ sub renewable {
 }
 
 sub renew {
-    # TODO
+    my ( $self, $uuid ) = @_;
+
+    my $checkout = $self->_getcheckoutforrenewal($uuid);
+
+    return { "CHECKOUT_NOT_FOUND" => 1 } unless $checkout;
+
+    my ( $renewable, $error ) = C4::Circulation::CanBookBeRenewed(
+        $checkout->{borrowernumber},
+        $checkout->{itemnumber},
+    );
+
+    return { uc($error) => 1 } unless $renewable;
+
+    my $date_due = C4::Circulation::AddRenewal(
+        $checkout->{borrowernumber},
+        $checkout->{itemnumber},
+        $checkout->{branchcode},
+    );
+
+    my ( $renewable ) = C4::Circulation::CanBookBeRenewed(
+        $checkout->{borrowernumber},
+        $checkout->{itemnumber},
+    );
+
+    return ( {}, $date_due, $renewable );
 }
 
 1;
