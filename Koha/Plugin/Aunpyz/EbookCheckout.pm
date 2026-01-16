@@ -449,7 +449,6 @@ sub ebookcheckout {
                     } catch {
                         $dbh->rollback;
                         $dbh->{AutoCommit} = 1;
-                        unlink $self->_dir() . "/$uuid";
                         # TODO: return meaningful error
                         return ( $_ );
                     };
@@ -552,7 +551,7 @@ sub renewable {
 
     return { "CHECKOUT_NOT_FOUND" => 1 } unless $checkout;
 
-    my ( $renewable ) = C4::Circulation::CanBookBeRenewed(
+    my ( $renewable ) = CanBookBeRenewed(
         $checkout->{borrowernumber},
         $checkout->{itemnumber},
     );
@@ -567,20 +566,20 @@ sub renew {
 
     return { "CHECKOUT_NOT_FOUND" => 1 } unless $checkout;
 
-    my ( $renewable, $error ) = C4::Circulation::CanBookBeRenewed(
+    my ( $renewable, $error ) = CanBookBeRenewed(
         $checkout->{borrowernumber},
         $checkout->{itemnumber},
     );
 
     return { uc($error) => 1 } unless $renewable;
 
-    my $date_due = C4::Circulation::AddRenewal(
+    my $date_due = AddRenewal(
         $checkout->{borrowernumber},
         $checkout->{itemnumber},
         $checkout->{branchcode},
     );
 
-    my ( $renewable ) = C4::Circulation::CanBookBeRenewed(
+    my ( $renewable ) = CanBookBeRenewed(
         $checkout->{borrowernumber},
         $checkout->{itemnumber},
     );
