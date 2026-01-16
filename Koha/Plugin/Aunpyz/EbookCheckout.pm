@@ -100,7 +100,9 @@ sub install() {
             `value` text,
             PRIMARY KEY (`name`)
         ) ENGINE = INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci; },
-        qq { INSERT INTO $config_table (name, value) VALUES ('HOST_NAME', $quoted_hostname) },
+        qq { INSERT INTO $config_table (name, value) VALUES
+         ('HOST_NAME', $quoted_hostname),
+         ('ITEM_INTERVAL_DAY', '1') },
     );
     for ( @installer_statements ) {
         my $sth = C4::Context->dbh->prepare( $_ );
@@ -198,8 +200,12 @@ sub _toolstep1 {
 
     my $config_table = $self->get_qualified_table_name($config_table);
     my $hostname = C4::Context->dbh->selectrow_hashref( qq| SELECT value FROM $config_table WHERE name = 'HOST_NAME' | ) or die "Could not find HOST_NAME in config table";
+    my $interval_day = C4::Context->dbh->selectrow_hashref( qq| SELECT value FROM $config_table WHERE name = 'ITEM_INTERVAL_DAY' | ) or die "Could not find ITEM_INTERVAL_DAY in config table";
     my $template = $self->get_template({ file => 'tool.tt' });
-    $template->param( hostname => $hostname->{value} );
+    $template->param(
+        hostname => $hostname->{value},
+        interval_day => $interval_day->{value}
+    );
 
     $self->output_html( $template->output() );
 }
@@ -208,10 +214,15 @@ sub _toolstep2 {
     my ( $self, $args ) = @_;
     my $cgi = $self->{'cgi'};
 
-    my $hostname = $cgi->param('hostname');
     my $config_table = $self->get_qualified_table_name($config_table);
+    
+    my $hostname = $cgi->param('hostname');
     my $sth = C4::Context->dbh->prepare( qq| UPDATE $config_table SET value = ? WHERE name = 'HOST_NAME' | );
     $sth->execute($hostname) or die "Could not update HOST_NAME in config table";
+
+    my $interval_day = $cgi->param('interval_day');
+    my $sth = C4::Context->dbh->prepare( qq| UPDATE $config_table SET value = ? WHERE name = 'ITEM_INTERVAL_DAY' | );
+    $sth->execute($interval_day) or die "Could not update ITEM_INTERVAL_DAY in config table";
 
     $self->_toolstep1();
 }

@@ -20,9 +20,17 @@
         <div class="form-group">
             <label for="hostname" class="col-sm-2 control-label">Hostname for reader website:</label>
             <div class="col-sm-5">
-                <input class="form-control" type="url" name="hostname" value="[% hostname | html %] "/>
+                <input class="form-control" type="url" name="hostname" value="[% hostname | html %]"/>
             </div>
             <p class="help-block">Left blank for the same hostname as OPAC hostname</p>
+        </div>
+        
+        <div class="form-group">
+            <label for="interval_day" class="col-sm-2 control-label">Interval for checkout:</label>
+            <div class="col-sm-5">
+                <input class="form-control" type="number" min="1" name="interval_day" value="[% interval_day | html %]"/>
+            </div>
+            <p class="help-block">Interval (day) for same ebook checkout after checkin</p>
         </div>
 
         <div class="form-group">
