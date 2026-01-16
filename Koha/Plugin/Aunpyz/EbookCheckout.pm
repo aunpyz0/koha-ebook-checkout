@@ -466,11 +466,16 @@ sub ebookcheckin {
     my ( $self, $barcode ) = @_;
 
     my $session = $self->_getsession();
-
     return ( { "UNAUTHORIZED" => 1 } ) unless $session;
-    
-    my ( $returned, $messages, $issue ) = AddReturn( $barcode );
 
+    my $item = Koha::Items->find( { barcode => $barcode } );
+    return ( { "ITEM_NOT_FOUND" => 1 } ) unless $item;
+
+    my $checkout = $item->checkout;
+    return ( { "CHECKOUT_NOT_FOUND" => 1 } ) unless $checkout;
+    return ( { "OVERDUE" => 1 }) if $checkout->is_overdue;
+
+    my ( $returned, $messages, $issue ) = AddReturn( $barcode );
     return { "CANNOT_CHECK_IN" => 1 } unless $returned;
 
     return ( {}, $returned );

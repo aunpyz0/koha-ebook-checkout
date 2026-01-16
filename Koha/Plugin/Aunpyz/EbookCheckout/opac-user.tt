@@ -21,7 +21,7 @@
                         if (link) {
                             const $td = $(this).find('td.read_link');
                             $td.append(`<div><a class="btn" href="${link}" target="_blank"><i class="icon-eye-open"></i> Read</a><div>Code: ${access_code}</div></div>`);
-                            $td.append($('<div><button class="btn" type="button"><i class="icon-remove"></i> Return</button></div>').on('click', function() {
+                            const $returnButton = $('<button class="btn return" type="button"><i class="icon-remove"></i> Return</button>').on('click', function() {
                                 $.ajax({
                                     type: 'POST',
                                     url: '/ebook-checkout/ebookcheckin.pl',
@@ -30,11 +30,14 @@
                                         location.reload();
                                     },
                                     error: function(jqXHR, status, error) {
-                                        alert('Failed to return the ebook');
+                                        alert('Failed to return the ebook, please contact librarian');
                                         console.error(error);
                                     }
                                 });
-                            }));
+                            });
+                            const isOverdue = $(this).find('td.date_due').hasClass('overdue');
+                            $returnButton.attr('disabled', isOverdue);
+                            $td.append($('<div>`</div>').append($returnButton));
                         }
                     })
                 },
