@@ -19,7 +19,22 @@
                         const barcode = $(this).find('td.barcode').clone().children().remove().end().text().trim();
                         const { link, access_code } = barcodesMap[barcode];
                         if (link) {
-                            $(this).find('td.read_link').append(`<div><a class="btn" href="${link}" target="_blank"><i class="icon-eye-open"></i> Read</a><div>Code: ${access_code}</div></div>`);
+                            const $td = $(this).find('td.read_link');
+                            $td.append(`<div><a class="btn" href="${link}" target="_blank"><i class="icon-eye-open"></i> Read</a><div>Code: ${access_code}</div></div>`);
+                            $td.append($('<div><button class="btn" type="button"><i class="icon-remove"></i> Return</button></div>').on('click', function() {
+                                $.ajax({
+                                    type: 'POST',
+                                    url: '/ebook-checkout/ebookcheckin.pl',
+                                    data: new URLSearchParams({ barcode: barcode }).toString(),
+                                    success: function() {
+                                        location.reload();
+                                    },
+                                    error: function(jqXHR, status, error) {
+                                        alert('Failed to return the ebook');
+                                        console.error(error);
+                                    }
+                                });
+                            }));
                         }
                     })
                 },

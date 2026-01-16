@@ -463,6 +463,20 @@ sub ebookcheckout {
     return ( { "UNAUTHORIZED" => 1 } );
 }
 
+sub ebookcheckin {
+    my ( $self, $barcode ) = @_;
+
+    my $session = $self->_getsession();
+
+    return ( { "UNAUTHORIZED" => 1 } ) unless $session;
+    
+    my ( $returned, $messages, $issue ) = AddReturn( $barcode );
+
+    return { "CANNOT_CHECK_IN" => 1 } unless $returned;
+
+    return ( {}, $returned );
+}
+
 sub unlock {
     my ( $self, $uuid, $access_code ) = @_;
     my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
