@@ -2,6 +2,7 @@ package Koha::Plugin::Aunpyz::EbookCheckout;
 
 use Modern::Perl;
 
+use DateTime;
 use XML::Simple;
 use UUID qw ( uuid );
 use Try::Tiny;
@@ -407,11 +408,11 @@ sub ebookcheckout {
                 # } elsif ( $needconfirm->{RENEW_ISSUE} ) {
                 #     # TODO: might have to handle renewal
                 # } else {
-                    my ( $hold_existed, $item );
+                    my $hold_existed;
+                    my $item = Koha::Items->find({ barcode => $barcode });
                     if ( C4::Context->preference('HoldFeeMode') eq 'any_time_is_collected' ) {
                         # There is no easy way to know if the patron has been charged for this item.
                         # So we check if a hold existed for this item before the check in
-                        $item = Koha::Items->find({ barcode => $barcode });
                         $hold_existed = Koha::Holds->search(
                             {
                                 -and => {
@@ -424,6 +425,25 @@ sub ebookcheckout {
                             }
                         )->count;
                     }
+
+                    my $old_issue = Koha::Old::Checkouts->search(
+                        {
+                            itemnumber     => $item->itemnumber,
+                            borrowernumber => $borrower->{borrowernumber},
+                        },
+                        { order_by => { -desc => 'returndate' } }
+                    )->next;
+
+                    if ( $old_issue ) {
+                        my $config_table = $self->get_qualified_table_name($config_table);
+                        my $interval_day = C4::Context->dbh->selectrow_array( qq| SELECT value FROM $config_table WHERE name = 'ITEM_INTERVAL_DAY' | ) or die "Could not find ITEM_INTERVAL_DAY in config table";
+                        my $returndate = dt_from_string($old_issue->returndate, 'sql');
+                        my $disallow_until_datetime = $returndate->add(days => $interval_day);
+                        if ( DateTime->compare( $disallow_until_datetime, DateTime->now ) != -1 ) {
+                            return ( { "CANNOT_CHECKOUT_WITHIN_INTERVAL" => 1 } );
+                        }
+                    }
+
                     my $dbh = C4::Context->dbh;
                     $dbh->{AutoCommit} = 0;
                     my $uuid = uuid();

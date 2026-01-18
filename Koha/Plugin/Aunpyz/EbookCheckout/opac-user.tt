@@ -17,8 +17,9 @@
                     const barcodesMap = data.reduce((barcodesMap, d) => ({ [d.barcode]: { link: d.link, access_code: d.access_code }, ...barcodesMap }), {})
                     $table.find('tbody tr').each(function() {
                         const barcode = $(this).find('td.barcode').clone().children().remove().end().text().trim();
-                        const { link, access_code } = barcodesMap[barcode];
-                        if (link) {
+                        const reader = barcodesMap[barcode];
+                        if (reader) {
+                            const { link, access_code } = reader;
                             const $td = $(this).find('td.read_link');
                             $td.append(`<div><a class="btn" href="${link}" target="_blank"><i class="icon-eye-open"></i> Read</a><div>Code: ${access_code}</div></div>`);
                             const $returnButton = $('<button class="btn return" type="button"><i class="icon-remove"></i> Return</button>').on('click', function() {
