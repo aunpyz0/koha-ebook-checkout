@@ -38,7 +38,7 @@
                             });
                             const isOverdue = $(this).find('td.date_due').hasClass('overdue');
                             $returnButton.attr('disabled', isOverdue);
-                            $td.append($('<div>`</div>').append($returnButton));
+                            $td.append($('<div></div>').append($returnButton));
                         }
                     })
                 },
