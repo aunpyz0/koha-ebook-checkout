@@ -77,6 +77,10 @@ sub install() {
     my $hostname = C4::Context->preference('OPACBaseURL');
     my $quoted_hostname = C4::Context->dbh->quote($hostname);
 
+    my $encryption_key = join('', map { ( 'a'..'z', 'A'..'Z', '0'..'9' )[rand 62] } 1..8);
+    my $quoted_encryption_key = C4::Context->dbh->quote($encryption_key);
+
+
     my @installer_statements = (
         q { INSERT INTO marc_tag_structure (tagfield,liblibrarian,libopac,`repeatable`,mandatory,authorised_value,frameworkcode) VALUES 
          ('857','PRIVATE EBOOK URL','PRIVATE EBOOK URL',0,0,'','') ON DUPLICATE KEY UPDATE tagfield=tagfield,frameworkcode=frameworkcode; },
@@ -103,7 +107,8 @@ sub install() {
         ) ENGINE = INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci; },
         qq { INSERT INTO $config_table (name, value) VALUES
          ('HOST_NAME', $quoted_hostname),
-         ('ITEM_INTERVAL_DAY', '1') },
+         ('ITEM_INTERVAL_DAY', '1'),
+         ('ENCRYPTION_KEY', $quoted_encryption_key) },
     );
     for ( @installer_statements ) {
         my $sth = C4::Context->dbh->prepare( $_ );
@@ -189,7 +194,7 @@ sub tool {
     my ( $self, $args ) = @_;
     my $cgi = $self->{cgi};
 
-    unless ( $cgi->param('hostname') ) {
+    unless ( $cgi->request_method() eq 'POST' ) {
         $self->_toolstep1();
     } else {
         $self->_toolstep2();
@@ -202,10 +207,12 @@ sub _toolstep1 {
     my $config_table = $self->get_qualified_table_name($config_table);
     my $hostname = C4::Context->dbh->selectrow_hashref( qq| SELECT value FROM $config_table WHERE name = 'HOST_NAME' | ) or die "Could not find HOST_NAME in config table";
     my $interval_day = C4::Context->dbh->selectrow_hashref( qq| SELECT value FROM $config_table WHERE name = 'ITEM_INTERVAL_DAY' | ) or die "Could not find ITEM_INTERVAL_DAY in config table";
+    my $encryption_key = C4::Context->dbh->selectrow_hashref( qq| SELECT value FROM $config_table WHERE name = 'ENCRYPTION_KEY' | ) or die "Could not find ENCRYPTION_KEY in config table";
     my $template = $self->get_template({ file => 'tool.tt' });
     $template->param(
         hostname => $hostname->{value},
-        interval_day => $interval_day->{value}
+        interval_day => $interval_day->{value},
+        encryption_key => $encryption_key->{value}
     );
 
     $self->output_html( $template->output() );
@@ -215,15 +222,20 @@ sub _toolstep2 {
     my ( $self, $args ) = @_;
     my $cgi = $self->{'cgi'};
 
+    my $sth;
     my $config_table = $self->get_qualified_table_name($config_table);
     
     my $hostname = $cgi->param('hostname');
-    my $sth = C4::Context->dbh->prepare( qq| UPDATE $config_table SET value = ? WHERE name = 'HOST_NAME' | );
+    $sth = C4::Context->dbh->prepare( qq| UPDATE $config_table SET value = ? WHERE name = 'HOST_NAME' | );
     $sth->execute($hostname) or die "Could not update HOST_NAME in config table";
 
     my $interval_day = $cgi->param('interval_day');
-    my $sth = C4::Context->dbh->prepare( qq| UPDATE $config_table SET value = ? WHERE name = 'ITEM_INTERVAL_DAY' | );
+    $sth = C4::Context->dbh->prepare( qq| UPDATE $config_table SET value = ? WHERE name = 'ITEM_INTERVAL_DAY' | );
     $sth->execute($interval_day) or die "Could not update ITEM_INTERVAL_DAY in config table";
+
+    my $encryption_key = $cgi->param('encryption_key');
+    $sth = C4::Context->dbh->prepare( qq| UPDATE $config_table SET value = ? WHERE name = 'ENCRYPTION_KEY' | );
+    $sth->execute($encryption_key) or die "Could not update ENCRYPTION_KEY in config table";
 
     $self->_toolstep1();
 }
@@ -539,15 +551,17 @@ sub getebookfilehandle {
     return ( { "OVERDUE" => 1 }) if $issue->is_overdue;
     return ( { "INVALID_TOKEN" => 1 } ) unless $checkout->{access_token} eq $access_token;
     
-    my ( $error, $fh ) = try {
+    my ( $error, $fh, $encryption_key ) = try {
         my $ebookfilerecord = $self->_getuploadedfile( $checkout->{file_hashvalue} );
         my $fh = $ebookfilerecord->file_handle if $ebookfilerecord or die { "OPEN_FILE_FAILED" => 1 };
+        my $config_table = $self->get_qualified_table_name($config_table);
+        my $encryption_key = C4::Context->dbh->selectrow_array( qq| SELECT value FROM $config_table WHERE name = 'ENCRYPTION_KEY' | );
         $fh->binmode;
-        return ( {}, $fh );
+        return ( {}, $fh, $encryption_key );
     } catch {
         return ( $_ );
     };
-    return ( $error, $fh );
+    return ( $error, $fh, $encryption_key );
 }
 
 sub expires {

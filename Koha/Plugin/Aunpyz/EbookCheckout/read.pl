@@ -19,7 +19,7 @@ my $ebookcheckout = Koha::Plugin::Aunpyz::EbookCheckout->new({ cgi => $cgi });
 my $uuid = $cgi->param("uuid");
 my $access_token = $cgi->http('X-Access');
 
-my ( $error, $ebookfh ) = $ebookcheckout->getebookfilehandle( $uuid, $access_token );
+my ( $error, $ebookfh, $encryption_key ) = $ebookcheckout->getebookfilehandle( $uuid, $access_token );
 
 if ( scalar keys %$error ) {
 	print $cgi->header(
@@ -34,8 +34,7 @@ if ( scalar keys %$error ) {
 			-status => 200,
 			-type => "application/octet-stream",
 		});
-	my $password = 'P@ssw0rd';
-	my $key = sha256($password);
+	my $key = sha256($encryption_key);
 	my $iv = Crypt::CBC->random_bytes(16);
 	my $cipher = Crypt::CBC->new(
 		{
