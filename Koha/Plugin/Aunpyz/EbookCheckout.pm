@@ -8,7 +8,6 @@ use UUID qw ( uuid );
 use Try::Tiny;
 use File::Path qw ( make_path remove_tree );
 use IO::File;
-use Crypt::Argon2 qw( argon2id_pass argon2id_verify );
 
 use base qw( Koha::Plugins::Base );
 
