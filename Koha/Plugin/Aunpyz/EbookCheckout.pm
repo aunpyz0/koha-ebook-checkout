@@ -84,7 +84,7 @@ sub install() {
         q { INSERT INTO marc_tag_structure (tagfield,liblibrarian,libopac,`repeatable`,mandatory,authorised_value,frameworkcode) VALUES 
          ('857','PRIVATE EBOOK URL','PRIVATE EBOOK URL',0,0,'','') ON DUPLICATE KEY UPDATE tagfield=tagfield,frameworkcode=frameworkcode; },
         q { INSERT INTO marc_subfield_structure (tagfield, tagsubfield, liblibrarian, libopac, `repeatable`, mandatory, important, kohafield, tab, authorised_value, authtypecode, value_builder, isurl, hidden, frameworkcode, seealso, link, defaultvalue, maxlength, display_order) VALUES
-         ('857', 'u', 'Uniform Resource Identifier', 'Uniform Resource Identifier', 0, 0, 0, 'biblioitems.url', 8, '', '', 'upload.pl', 1, 0, '', NULL, '', '', 9999, 0); },
+         ('857', 'u', 'Uniform Resource Identifier', 'Uniform Resource Identifier', 0, 0, 0, 'biblioitems.url', 8, '', '', 'upload.pl', 1, 4, '', NULL, '', '', 9999, 0) ON DUPLICATE KEY UPDATE tagfield=tagfield; },
         q { INSERT INTO columns_settings (module,page,tablename,columnname,cannot_be_toggled,is_hidden) VALUES
          ('opac','biblio-detail','holdingst','item_barcode',0,0) ON DUPLICATE KEY UPDATE is_hidden=0, cannot_be_toggled=0; },
         q { INSERT INTO borrower_attribute_types (code,description,`repeatable`,unique_id,opac_display,opac_editable,staff_searchable,authorised_value_category,display_checkout,category_code,class) VALUES
