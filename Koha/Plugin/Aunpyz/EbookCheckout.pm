@@ -14,12 +14,14 @@ use base qw( Koha::Plugins::Base );
 use C4::Auth;
 use C4::Context;
 use C4::Koha;
-use C4::Circulation;
+use C4::Circulation
+  qw( CanBookBeIssued CanBookBeRenewed AddIssue AddReturn AddRenewal);
 use C4::Reserves;
 use C4::Output;
 use C4::Members;
 use C4::Biblio;
-use C4::Items;
+use Koha::Database;
+use Koha::Items;
 use Koha::DateUtils qw( dt_from_string );
 use Koha::Acquisition::Currencies;
 use Koha::Patrons;
@@ -270,7 +272,7 @@ s/\/\* JS for Koha Ebook Checkout Plugin.*End of JS for Koha Ebook Checkout Plug
     return $opacuserjs;
 }
 
-sub _getsession {
+sub _get_session {
     my ($self) = @_;
     my $cgi = $self->{cgi};
 
@@ -288,8 +290,8 @@ sub _getsession {
 sub _getbiblionumber {
     my ( $self, $barcode ) = @_;
 
-    my $item = C4::Items::GetItem( { barcode => $barcode } );
-    return $item->{biblionumber};
+    my $item = Koha::Items->search( { barcode => $barcode } )->next;
+    return $item->biblionumber if $item;
 }
 
 sub _getprivateebook {
@@ -304,16 +306,16 @@ sub _getprivateebook {
     return $privateebook->{subfield}->{content};
 }
 
-sub _getprivateebookfilerecord {
+sub _get_private_ebook_file_record {
     my ( $self, $biblionumber ) = @_;
 
     my $ebookurl = $self->_getprivateebook($biblionumber) || '';
     my $hash     = ( split( /\?id=/, $ebookurl ) )[1];
 
-    return $self->_getuploadedfile($hash);
+    return $self->_get_uploaded_file($hash);
 }
 
-sub _getuploadedfile {
+sub _get_uploaded_file {
     my ( $self, $hashvalue ) = @_;
 
     return Koha::UploadedFiles->search(
@@ -334,7 +336,7 @@ sub opacdetail {
     my ( $self, $biblionumber ) = @_;
     my $cgi = $self->{cgi};
 
-    my $session  = $self->_getsession();
+    my $session  = $self->_get_session();
     my $template = $self->get_template( { file => 'opac-detail.tt' } );
     $template->param( loggedin => $session ? 1 : 0, );
 
@@ -345,7 +347,7 @@ sub opacuser {
     my ($self) = @_;
     my $cgi = $self->{cgi};
 
-    my $session  = $self->_getsession();
+    my $session  = $self->_get_session();
     my $template = $self->get_template( { file => 'opac-user.tt' } );
     $template->param( loggedin => $session ? 1 : 0, );
 
@@ -356,7 +358,7 @@ sub getlinks {
     my ($self) = @_;
     my $cgi = $self->{cgi};
 
-    my $session = $self->_getsession();
+    my $session = $self->_get_session();
     if ($session) {
         my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
         my $config_table    = $self->get_qualified_table_name($config_table);
@@ -378,160 +380,114 @@ sub ebookcheckout {
     my ( $self, $barcode ) = @_;
     my $cgi = $self->{cgi};
 
-    my $session = $self->_getsession();
-    if ($session) {
-        my $biblionumber = $self->_getbiblionumber($barcode);
-        if ($biblionumber) {
-            if ( $self->hasprivateebook($biblionumber) ) {
-                my $borrower;
-                my $cardnumber = $session->param("cardnumber");
-                if ($cardnumber) {
-                    $borrower =
-                      Koha::Patrons->find( { cardnumber => $cardnumber } );
-                    $borrower = $borrower->unblessed if $borrower;
-                }
+    my $session = $self->_get_session();
 
-                my ( $impossible, $needconfirm ) =
-                  CanBookBeIssued( $borrower, $barcode, undef, 0,
-                    C4::Context->preference("AllowItemsOnHoldCheckoutSCO") );
+    return ( { "UNAUTHORIZED" => 1 } ) unless $session;
 
-# my $confirm_required = 0;
-# my $issue_error;
-# if ( $confirm_required = scalar keys %$needconfirm ) {
-#     for my $error ( qw( UNKNOWN_BARCODE max_loans_allowed ISSUED_TO_ANOTHER NO_MORE_RENEWALS NOT_FOR_LOAN DEBT WTHDRAWN RESTRICTED RESERVED ITEMNOTSAMEBRANCH EXPIRED DEBARRED CARD_LOST GNA INVALID_DATE UNKNOWN_BARCODE TOO_MANY DEBT_GUARANTEES USERBLOCKEDOVERDUE PATRON_CANT PREVISSUE NOT_FOR_LOAN_FORCING ITEM_LOST) ) {
-#         if ( $needconfirm->{$error} ) {
-#             $issue_error = $error;
-#             last;
-#         }
-#     }
-# }
-                if ( scalar keys %$impossible || scalar keys %$needconfirm ) {
-                    return ( $impossible, $needconfirm );
-                }
+    my $biblionumber = $self->_getbiblionumber($barcode);
 
-# if (scalar keys %$impossible) {
-#     my $issue_error = (keys %$impossible)[0]; # FIXME This is wrong, we assume only one error and keys are not ordered
+    return ( { "UNKNOWN_BARCODE" => 1 } ) unless $biblionumber;
 
-                #     warn "issue_error: $issue_error";
+    return ( { "NO_PRIVATE_EBOOK" => 1 } )
+      unless $self->hasprivateebook($biblionumber);
 
-                #     # TODO: do something
-                # } elsif ( $needconfirm->{RENEW_ISSUE} ) {
-                #     # TODO: might have to handle renewal
-                # } else {
-                my $hold_existed;
-                my $item = Koha::Items->find( { barcode => $barcode } );
-                if ( C4::Context->preference('HoldFeeMode') eq
-                    'any_time_is_collected' )
-                {
+    my $borrower;
+    my $cardnumber = $session->param("cardnumber");
+    if ($cardnumber) {
+        $borrower = Koha::Patrons->find( { cardnumber => $cardnumber } );
+    }
+
+    my ( $impossible, $needconfirm ) =
+      CanBookBeIssued( $borrower, $barcode, undef, 0,
+        C4::Context->preference("AllowItemsOnHoldCheckoutSCO") );
+
+    if ( scalar keys %$impossible || scalar keys %$needconfirm ) {
+        return ( $impossible, $needconfirm );
+    }
+
+    my $hold_existed;
+    my $item = Koha::Items->find( { barcode => $barcode } );
+    if ( C4::Context->preference('HoldFeeMode') eq 'any_time_is_collected' ) {
+
     # There is no easy way to know if the patron has been charged for this item.
     # So we check if a hold existed for this item before the check in
-                    $hold_existed = Koha::Holds->search(
-                        {
-                            -and => {
-                                borrowernumber => $borrower->{borrowernumber},
-                                -or            => {
-                                    biblionumber => $item->biblionumber,
-                                    itemnumber   => $item->itemnumber
-                                }
-                            }
-                        }
-                    )->count;
-                }
-
-                my $old_issue = Koha::Old::Checkouts->search(
-                    {
-                        itemnumber     => $item->itemnumber,
-                        borrowernumber => $borrower->{borrowernumber},
-                    },
-                    { order_by => { -desc => 'returndate' } }
-                )->next;
-
-                if ($old_issue) {
-                    my $config_table =
-                      $self->get_qualified_table_name($config_table);
-                    my $interval_day = C4::Context->dbh->selectrow_array(
-qq| SELECT value FROM $config_table WHERE name = 'ITEM_INTERVAL_DAY' |
-                      )
-                      or die "Could not find ITEM_INTERVAL_DAY in config table";
-                    my $returndate =
-                      dt_from_string( $old_issue->returndate, 'sql' );
-                    my $disallow_until_datetime =
-                      $returndate->add( days => $interval_day );
-                    if (
-                        DateTime->compare( $disallow_until_datetime,
-                            DateTime->now ) != -1
-                      )
-                    {
-                        return ( { "CANNOT_CHECKOUT_WITHIN_INTERVAL" => 1 } );
+        $hold_existed = Koha::Holds->search(
+            {
+                -and => {
+                    borrowernumber => $borrower->{borrowernumber},
+                    -or            => {
+                        biblionumber => $item->biblionumber,
+                        itemnumber   => $item->itemnumber
                     }
                 }
-
-                my $dbh = C4::Context->dbh;
-                $dbh->{AutoCommit} = 0;
-                my $uuid = uuid();
-
-                my @chars       = ( '0' .. '9', 'A' .. 'Z', 'a' .. 'z' );
-                my $access_code = join "", map { $chars[ rand @chars ] } 1 .. 6;
-
-                ( $impossible, my %checkout ) = try {
-                    my $issue = AddIssue( $borrower, $barcode );
-                    my $ebookfilerecord =
-                      $self->_getprivateebookfilerecord($biblionumber);
-
-                    my $checkouts_table =
-                      $self->get_qualified_table_name($checkouts_table);
-                    $dbh->do(
-qq|INSERT INTO $checkouts_table (uuid, file_hashvalue, issue_id, access_code) VALUES (?, ?, ?, ?)|,
-                        undef,
-                        $uuid,
-                        $ebookfilerecord->hashvalue,
-                        $issue->issue_id,
-                        $access_code
-                    ) or die { "INSERT_CHECKOUT_FAILED" => $dbh->errstr };
-                    $dbh->commit;
-                    $dbh->{AutoCommit} = 1;
-
-                    if ($hold_existed) {
-
-# my $dtf = Koha::Database->new->schema->storage->datetime_parser;
-# $template->param(
-#     # If the hold existed before the check in, let's confirm that the charge line exists
-#     # Note that this should not be needed but since we do not have proper exception handling here we do it this way
-#     patron_has_hold_fee => Koha::Account::Lines->search(
-#         {
-#             borrowernumber => $borrower->{borrowernumber},
-#             accounttype    => 'Res',
-#             description    => 'Reserve Charge - ' . $item->biblio->title,
-#             date           => $dtf->format_date(dt_from_string)
-#         }
-#       )->count,
-# );
-                    }
-
-                    return ( {}, ( "uuid" => $uuid ) );
-                }
-                catch {
-                    $dbh->rollback;
-                    $dbh->{AutoCommit} = 1;
-
-                    # TODO: return meaningful error
-                    return ($_);
-                };
-                return ( $impossible, $needconfirm, %checkout );
-
-                # }
             }
-            return ( { "NO_PRIVATE_EBOOK" => 1 } );
-        }
-        return ( { "UNKNOWN_BARCODE" => 1 } );
+        )->count;
     }
-    return ( { "UNAUTHORIZED" => 1 } );
+
+    my $old_issue = Koha::Old::Checkouts->search(
+        {
+            itemnumber     => $item->itemnumber,
+            borrowernumber => $borrower->{borrowernumber},
+        },
+        { order_by => { -desc => 'returndate' } }
+    )->next;
+
+    if ($old_issue) {
+        my $config_table = $self->get_qualified_table_name($config_table);
+        my $interval_day = C4::Context->dbh->selectrow_array(
+qq| SELECT value FROM $config_table WHERE name = 'ITEM_INTERVAL_DAY' |
+        ) or die "Could not find ITEM_INTERVAL_DAY in config table";
+        my $returndate = dt_from_string( $old_issue->returndate, 'sql' );
+        my $disallow_until_datetime = $returndate->add( days => $interval_day );
+        if (
+            DateTime->compare( $disallow_until_datetime, DateTime->now ) != -1 )
+        {
+            return ( { "CANNOT_CHECKOUT_WITHIN_INTERVAL" => 1 } );
+        }
+    }
+
+    my $dbh  = C4::Context->dbh;
+    my $uuid = uuid();
+
+    my @chars       = ( '0' .. '9', 'A' .. 'Z', 'a' .. 'z' );
+    my $access_code = join "", map { $chars[ rand @chars ] } 1 .. 6;
+
+    ( $impossible, my %checkout ) = try {
+        my $schema = Koha::Database->schema;
+        $schema->txn_do(
+            sub {
+                my $issue = AddIssue( $borrower, $barcode );
+                my $ebook_file_record =
+                  $self->_get_private_ebook_file_record($biblionumber);
+
+                my $checkouts_table =
+                  $self->get_qualified_table_name($checkouts_table);
+                $dbh->do(
+qq|INSERT INTO $checkouts_table (uuid, file_hashvalue, issue_id, access_code) VALUES (?, ?, ?, ?)|,
+                    undef,
+                    $uuid,
+                    $ebook_file_record->hashvalue,
+                    $issue->issue_id,
+                    $access_code
+                ) or die { "INSERT_CHECKOUT_FAILED" => $dbh->errstr };
+            }
+        );
+
+        return ( {}, ( "uuid" => $uuid ) );
+    }
+    catch {
+        # IS: server error
+        return ($_);
+    };
+    return ( $impossible, $needconfirm, %checkout );
+
+    # }
 }
 
 sub ebookcheckin {
     my ( $self, $barcode ) = @_;
 
-    my $session = $self->_getsession();
+    my $session = $self->_get_session();
     return ( { "UNAUTHORIZED" => 1 } ) unless $session;
 
     my $item = Koha::Items->find( { barcode => $barcode } );
@@ -585,10 +541,10 @@ qq|SELECT access_token, file_hashvalue, issue_id FROM $checkouts_table WHERE uui
       unless $checkout->{access_token} eq $access_token;
 
     my ( $error, $fh, $encryption_key ) = try {
-        my $ebookfilerecord =
-          $self->_getuploadedfile( $checkout->{file_hashvalue} );
-        my $fh = $ebookfilerecord->file_handle
-          if $ebookfilerecord
+        my $ebook_file_record =
+          $self->_get_uploaded_file( $checkout->{file_hashvalue} );
+        my $fh = $ebook_file_record->file_handle
+          if $ebook_file_record
           or die { "OPEN_FILE_FAILED" => 1 };
         my $config_table   = $self->get_qualified_table_name($config_table);
         my $encryption_key = C4::Context->dbh->selectrow_array(
@@ -621,7 +577,7 @@ sub expires {
     return ( {}, dt_from_string( $date_due, 'sql' ) );
 }
 
-sub _getcheckoutforrenewal {
+sub _get_checkout_for_renewal {
     my ( $self, $uuid ) = @_;
     my $checkouts_table = $self->get_qualified_table_name($checkouts_table);
 
@@ -640,7 +596,7 @@ sub _getcheckoutforrenewal {
 sub renewable {
     my ( $self, $uuid ) = @_;
 
-    my $checkout = $self->_getcheckoutforrenewal($uuid);
+    my $checkout = $self->_get_checkout_for_renewal($uuid);
 
     return { "CHECKOUT_NOT_FOUND" => 1 } unless $checkout;
 
@@ -653,7 +609,7 @@ sub renewable {
 sub renew {
     my ( $self, $uuid ) = @_;
 
-    my $checkout = $self->_getcheckoutforrenewal($uuid);
+    my $checkout = $self->_get_checkout_for_renewal($uuid);
 
     return { "CHECKOUT_NOT_FOUND" => 1 } unless $checkout;
 
