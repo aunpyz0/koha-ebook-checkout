@@ -12,41 +12,33 @@
     &rsaquo;
     Ebook Checkout &rsaquo; Tool
 </div>
-<div id="doc2">
+<div id="doc2" class="container">
     <form class="form-horizontal" action="/cgi-bin/koha/plugins/run.pl" method="post">
+        [% INCLUDE 'csrf-token.inc' %]
         <input type="hidden" name="class" value="[% CLASS %]"/>
         <input type="hidden" name="method" value="[% METHOD %]"/>
 
-        <div class="form-group">
-            <label for="hostname" class="col-sm-2 control-label">Hostname for reader website:</label>
-            <div class="col-sm-5">
-                <input class="form-control" type="url" name="hostname" value="[% hostname | html %]"/>
-            </div>
-            <p class="help-block">Left blank for the same hostname as OPAC hostname</p>
+        <div class="mb-3">
+            <label for="hostname" class="form-label d-inline-block">Hostname for reader website</label>
+            <input class="form-control" type="url" name="hostname" value="[% hostname | html %]"/>
+            <div class="form-text">Left blank for the same hostname as OPAC hostname</div>
         </div>
         
-        <div class="form-group">
-            <label for="interval_day" class="col-sm-2 control-label">Interval for checkout:</label>
-            <div class="col-sm-5">
-                <input class="form-control" type="number" min="1" name="interval_day" value="[% interval_day | html %]"/>
-            </div>
-            <p class="help-block">Interval (day) for same ebook checkout after checkin</p>
+        <div class="mb-3">
+            <label for="interval_day" class="form-label d-inline-block">Interval for checkout</label>
+            <input class="form-control" type="number" min="1" name="interval_day" value="[% interval_day | html %]"/>
+            <div class="form-text">Interval (day) for same ebook checkout after checkin</div>
         </div>
 
-        <div class="form-group">
-            <label for="encryption_key" class="col-sm-2 control-label">Encryption key:</label>
-            <div class="col-sm-5">
-                <input class="form-control" type="text" name="encryption_key" id="encryption_key" value="[% encryption_key | html %]" minlength="8" maxlength="8" required />
-            </div>
-            <p class="help-block">Encryption key used to encrypt ebook file</p>
-            <p class="help-block">Must be exactly 8 characters long.</p>
+        <div class="mb-3">
+            <label for="encryption_key" class="form-label d-inline-block">Encryption key</label>
+            <input class="form-control" type="text" name="encryption_key" id="encryption_key" value="[% encryption_key | html %]" minlength="8" maxlength="8" required />
+            <div class="form-text">Encryption key used to encrypt ebook file</div>
+            <div class="form-text">Must be exactly 8 characters long.</div>
         </div>
 
-
-        <div class="form-group">
-            <div class="col-sm-offset-2 col-sm-10">
-                <button type="submit" class="btn btn-default">Update</button>
-            </div>
+        <div>
+            <button type="submit" class="btn btn-primary">Update</button>
         </div>
     </form>
 </div>
