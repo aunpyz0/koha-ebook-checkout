@@ -4,8 +4,19 @@
     $(document).ready(function() {
         if ($(location).attr("pathname").endsWith("opac-detail.pl")) {
             const $table = $('#holdingst.table');
+
+            // destroy datatable so we can add a column
+            const dataTable = $table.DataTable();
+            const columns_settings = dataTable.settings()[0].aoColumns.map((col) => ({
+                columnname: col.colname,
+                cannot_be_toggled: 0,
+                is_hidden: col.bVisible ? 0 : 1,
+            }));
+            dataTable.destroy();
+
             $table.css('table-layout', 'auto');
-            $table.find('thead tr').append('<th id="item_checkout" data-colname="item_checkout" tabindex="0" aria-controls="holdingst" rowspan="1" colspan="1" aria-label="Checkout" style="width: 0px;">Checkout</th>');
+            const $th = $('<th id="item_checkout" data-colname="item_checkout" tabindex="0" aria-controls="holdingst" rowspan="1" colspan="1" aria-label="Checkout" style="width: 0px;">Checkout</th>');
+            $th.insertBefore($table.find('thead tr th').last());
             const $trs = $table.find('tbody tr');
             $trs.each(function() {
                 const schema = $(this).find('.status link').attr('href');
@@ -15,11 +26,29 @@
                       'http://schema.org/Discontinued': '<a class="btn btn-secondary disabled" href="#"><i class="fa-solid fa-ban"></i> Checkout</a>',
                       'http://schema.org/OutOfStock': '<a class="btn btn-secondary disabled" href="#"><i class="fa-solid fa-ban"></i> Checkout</a>',
                     }[schema])
-                    .appendTo(this);
+                    .insertBefore($(this).find('td').last());
             });
             $trs.find('td.checkout').click(function(e) {
                 e.preventDefault();
             })
+
+            // reinitialize datatable
+            columns_settings.splice(columns_settings.length - 1, 0, {
+                columnname: "item_checkout",
+                cannot_be_toggled: 0,
+                is_hidden: 0
+            });
+            $("#holdingst").kohaTable(
+                {
+                    dom: '<"clearfix">t',
+                    bKohaColumnsUseNames: true,
+                    responsive: {
+                        details: { type: "column", target: -1 },
+                    },
+                },
+                { columns: columns_settings }
+            );
+            
             [% IF loggedin == 1%]
             $trs.find('td.checkout a.checkout:not(.disabled)').click(function(e) {
                 $button = $(e.target);
