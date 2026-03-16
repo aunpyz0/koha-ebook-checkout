@@ -197,14 +197,14 @@ sub tool {
     my $cgi = $self->{cgi};
 
     unless ( $cgi->request_method() eq 'POST' ) {
-        $self->_toolstep1();
+        $self->_tool_step1();
     }
     else {
-        $self->_toolstep2();
+        $self->_tool_step2();
     }
 }
 
-sub _toolstep1 {
+sub _tool_step1 {
     my ( $self, $args ) = @_;
 
     my $config_table = $self->get_qualified_table_name($config_table);
@@ -227,7 +227,7 @@ sub _toolstep1 {
     $self->output_html( $template->output() );
 }
 
-sub _toolstep2 {
+sub _tool_step2 {
     my ( $self, $args ) = @_;
     my $cgi = $self->{'cgi'};
 
@@ -253,7 +253,7 @@ qq| UPDATE $config_table SET value = ? WHERE name = 'ITEM_INTERVAL_DAY' |
     $sth->execute($encryption_key)
       or die "Could not update ENCRYPTION_KEY in config table";
 
-    $self->_toolstep1();
+    $self->_tool_step1();
 }
 
 sub _dir() {
@@ -414,7 +414,7 @@ sub ebookcheckout {
         $hold_existed = Koha::Holds->search(
             {
                 -and => {
-                    borrowernumber => $borrower->{borrowernumber},
+                    borrowernumber => $borrower->borrowernumber,
                     -or            => {
                         biblionumber => $item->biblionumber,
                         itemnumber   => $item->itemnumber
@@ -427,7 +427,7 @@ sub ebookcheckout {
     my $old_issue = Koha::Old::Checkouts->search(
         {
             itemnumber     => $item->itemnumber,
-            borrowernumber => $borrower->{borrowernumber},
+            borrowernumber => $borrower->borrowernumber,
         },
         { order_by => { -desc => 'returndate' } }
     )->next;

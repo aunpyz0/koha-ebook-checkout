@@ -34,7 +34,7 @@
                     success: function(data) {
                         $button.removeClass('checkout');
                         $button.find('i').remove();
-                        $button.prepend('<i class="icon-remove"></i>')
+                        $button.prepend('<i class="fa-solid fa-ban"></i>')
                         location.reload();
                     },
                     error: function(jqXHR, status, error) {
