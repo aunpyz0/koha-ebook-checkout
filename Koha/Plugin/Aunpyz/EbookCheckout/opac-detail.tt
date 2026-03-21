@@ -38,7 +38,7 @@
                 cannot_be_toggled: 0,
                 is_hidden: 0
             });
-            $("#holdingst").kohaTable(
+            $table.kohaTable(
                 {
                     dom: '<"clearfix">t',
                     bKohaColumnsUseNames: true,

@@ -3,11 +3,59 @@
 [% IF loggedin == 1 %]
 <script type="text/javascript">
     $(document).ready(function() {
+        $.fn.reinitializeTable = function() {
+            const dataTable = $(this).DataTable();
+            dataTable.destroy();
+
+            $(this).kohaTable(
+                {
+                    order: [[$(this).find("th.psort").index(), "asc"]],
+                    dom: '<"top"<"table_entries"><"table_controls"fB>>t',
+                    columnDefs: [
+                        { visible: false, targets: ["hidden"] },
+                        { className: "dtr-control", orderable: false, targets: -1 },
+                    ],
+                    language: {
+                        search: "_INPUT_",
+                        searchPlaceholder: _("Search"),
+                    },
+                    bKohaColumnsUseNames: true,
+                    responsive: {
+                        details: { type: "column", target: -1 },
+                    },
+                    buttons: [
+                        /* Override default button set so that we can extend the options of print and csv */
+                        "clearFilter",
+                        "copy",
+                        {
+                            extend: "print",
+                            exportOptions: {
+                                /* Print view should show all columns (even invisible ones) unless they are .no-export */
+                                columns: ":not(.no-export)",
+                            },
+                        },
+                        {
+                            extend: "csv",
+                            exportOptions: {
+                                /* CSV export should include all columns (even invisible ones) unless they are .no-export */
+                                columns: ":not(.no-export)",
+                            },
+                        },
+                    ],
+                },
+            );
+        }
         if ($(location).attr("pathname").endsWith("opac-user.pl")) {
             const $table = $('#checkoutst.table');
-            $table.find('thead tr').append('<th id="item_read_link" tabindex="0" aria-controls="checkoutst" rowspan="1" colspan="1" aria-label="Read link">Read link</th>');
+            
+            // destroy datatable so we can add a column
+            const dataTable = $table.DataTable();
+            dataTable.destroy();
+            
+            const $th = $('<th id="item_read_link" tabindex="0" aria-controls="checkoutst" rowspan="1" colspan="1" aria-label="Read link">Read link</th>');
+            $th.insertBefore($table.find('thead tr th').last());
             $table.find('tbody tr').each(function() {
-                $(this).append('<td class="read_link"></td>');
+                $('<td class="read_link"></td>').insertBefore($(this).find('td').last());
             });
             $.ajax({
                 type: 'GET',
@@ -42,7 +90,11 @@
                         }
                     })
                 },
+                complete: function() {
+                    $table.reinitializeTable();
+                }
             });
+            $table.reinitializeTable();
         }
     });
 </script>
