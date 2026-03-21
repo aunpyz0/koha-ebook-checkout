@@ -583,14 +583,18 @@ sub _get_checkout_for_renewal {
 
     my $checkout = C4::Context->dbh->selectrow_hashref(
         qq|
-        SELECT i.borrowernumber, i.itemnumber, i.branchcode
-        FROM issues i
-        JOIN $checkouts_table c ON c.issue_id = i.issue_id
+        SELECT c.issue_id
+        FROM $checkouts_table c
         WHERE c.uuid = ?
     |, undef, $uuid
     );
+    my $issue = Koha::Checkouts->search(
+        {
+            issue_id => $checkout->{issue_id},
+        },
+    )->next;
 
-    return $checkout;
+    return $issue;
 }
 
 sub renewable {
@@ -600,8 +604,7 @@ sub renewable {
 
     return { "CHECKOUT_NOT_FOUND" => 1 } unless $checkout;
 
-    my ($renewable) =
-      CanBookBeRenewed( $checkout->{borrowernumber}, $checkout->{itemnumber}, );
+    my ($renewable) = CanBookBeRenewed( $checkout->patron, $checkout, );
 
     return ( {}, $renewable );
 }
@@ -614,20 +617,27 @@ sub renew {
     return { "CHECKOUT_NOT_FOUND" => 1 } unless $checkout;
 
     my ( $renewable, $error ) =
-      CanBookBeRenewed( $checkout->{borrowernumber}, $checkout->{itemnumber}, );
+      CanBookBeRenewed( $checkout->patron, $checkout, );
 
     return { uc($error) => 1 } unless $renewable;
 
-    my $date_due = AddRenewal(
-        $checkout->{borrowernumber},
-        $checkout->{itemnumber},
-        $checkout->{branchcode},
+    my $schema = Koha::Database->schema;
+    $schema->txn_do(
+        sub {
+            my $date_due = AddRenewal(
+                {
+                    borrowernumber => $checkout->borrowernumber,
+                    itemnumber     => $checkout->itemnumber,
+                    branch         => $checkout->branchcode,
+                }
+            );
+
+            my $checkout = $self->_get_checkout_for_renewal($uuid);
+            my ($renewable) = CanBookBeRenewed( $checkout->patron, $checkout, );
+
+            return ( {}, $date_due, $renewable );
+        }
     );
-
-    my ($renewable) =
-      CanBookBeRenewed( $checkout->{borrowernumber}, $checkout->{itemnumber}, );
-
-    return ( {}, $date_due, $renewable );
 }
 
 1;
