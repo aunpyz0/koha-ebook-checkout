@@ -32,7 +32,7 @@ use Koha::UploadedFiles;
 use Koha::Checkouts;
 
 ## Here we set our plugin version
-our $VERSION = '2.0.0rc1';
+our $VERSION = '2.0.0';
 
 ## Here is our metadata, some keys are required, some are optional
 our $metadata = {
