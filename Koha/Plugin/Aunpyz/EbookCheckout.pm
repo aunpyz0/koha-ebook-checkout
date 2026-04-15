@@ -44,7 +44,7 @@ our $metadata = {
     maximum_version => undef,
     version         => $VERSION,
     description     =>
-'This plugin adds the ability to checkout book with licensed ebook (857$u) via OPAC',
+'This plugin adds the ability to checkout book with encryption upon request (857$u) via OPAC',
 };
 
 ## Table names
