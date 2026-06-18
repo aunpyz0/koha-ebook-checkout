@@ -188,23 +188,19 @@ sub uninstall() {
     return 1;
 }
 
-## The existance of a 'tool' subroutine means the plugin is capable
-## of running a tool. The difference between a tool and a report is
-## primarily semantic, but in general any plugin that modifies the
-## Koha database should be considered a tool
-sub tool {
+sub configure {
     my ( $self, $args ) = @_;
     my $cgi = $self->{cgi};
 
     unless ( $cgi->request_method() eq 'POST' ) {
-        $self->_tool_step1();
+        $self->_configure_form();
     }
     else {
-        $self->_tool_step2();
+        $self->_configure_save();
     }
 }
 
-sub _tool_step1 {
+sub _configure_form {
     my ( $self, $args ) = @_;
 
     my $config_table = $self->get_qualified_table_name($config_table);
@@ -217,7 +213,7 @@ sub _tool_step1 {
     my $encryption_key = C4::Context->dbh->selectrow_hashref(
         qq| SELECT value FROM $config_table WHERE name = 'ENCRYPTION_KEY' |)
       or die "Could not find ENCRYPTION_KEY in config table";
-    my $template = $self->get_template( { file => 'tool.tt' } );
+    my $template = $self->get_template( { file => 'configure.tt' } );
     $template->param(
         hostname       => $hostname->{value},
         interval_day   => $interval_day->{value},
@@ -227,7 +223,7 @@ sub _tool_step1 {
     $self->output_html( $template->output() );
 }
 
-sub _tool_step2 {
+sub _configure_save {
     my ( $self, $args ) = @_;
     my $cgi = $self->{'cgi'};
 
@@ -253,7 +249,7 @@ qq| UPDATE $config_table SET value = ? WHERE name = 'ITEM_INTERVAL_DAY' |
     $sth->execute($encryption_key)
       or die "Could not update ENCRYPTION_KEY in config table";
 
-    $self->_tool_step1();
+    $self->_configure_form();
 }
 
 sub _dir() {

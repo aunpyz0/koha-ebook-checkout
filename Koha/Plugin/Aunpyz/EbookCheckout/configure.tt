@@ -10,7 +10,7 @@
     &rsaquo;
     <a href="/cgi-bin/koha/plugins/plugins-home.pl">Plugins</a>
     &rsaquo;
-    Ebook Checkout &rsaquo; Tool
+    Ebook Checkout &rsaquo; Configure
 </div>
 <div id="doc2" class="container">
     <form class="form-horizontal" action="/cgi-bin/koha/plugins/run.pl" method="post">
