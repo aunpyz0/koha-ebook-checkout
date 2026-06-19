@@ -1,6 +1,6 @@
 All agents working in this repository must follow this rule:
 
-- Every template file ending in `.tt` must be executable.
+- Every new template file ending in `.tt` must be executable.
 
 Possible Koha plugin hooks and entry points to refer to during future plugin
 development, based on the Kitchen Sink plugin:

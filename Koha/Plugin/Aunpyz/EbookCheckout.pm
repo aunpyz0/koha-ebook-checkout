@@ -20,6 +20,7 @@ use C4::Reserves;
 use C4::Output;
 use C4::Members;
 use C4::Biblio;
+use Koha::Biblios;
 use Koha::Database;
 use Koha::Items;
 use Koha::DateUtils qw( dt_from_string );
@@ -32,7 +33,7 @@ use Koha::UploadedFiles;
 use Koha::Checkouts;
 
 ## Here we set our plugin version
-our $VERSION = '2.0.0';
+our $VERSION = '2.0.1';
 
 ## Here is our metadata, some keys are required, some are optional
 our $metadata = {
@@ -250,6 +251,51 @@ qq| UPDATE $config_table SET value = ? WHERE name = 'ITEM_INTERVAL_DAY' |
       or die "Could not update ENCRYPTION_KEY in config table";
 
     $self->_configure_form();
+}
+
+sub tool {
+    my ( $self, $args ) = @_;
+
+    my $missing_ebook_url_biblios = $self->_get_biblios_without_857u();
+    my $template                  = $self->get_template( { file => 'tool.tt' } );
+
+    $template->param(
+        missing_ebook_url_biblios => $missing_ebook_url_biblios,
+        missing_ebook_url_count   => scalar @{$missing_ebook_url_biblios},
+    );
+
+    $self->output_html( $template->output() );
+}
+
+sub _get_biblios_without_857u {
+    my ($self) = @_;
+
+    my $biblios = Koha::Biblios->search(
+        {},
+        { order_by => ['me.biblionumber'] }
+    );
+    my @missing_ebook_url_biblios;
+
+    while ( my $biblio = $biblios->next ) {
+        my $record   = $biblio->metadata->record;
+        my $has_857u = 0;
+
+        for my $field ( $record->field('857') ) {
+            for my $url ( $field->subfield('u') ) {
+                if ( defined $url && $url =~ /\S/ ) {
+                    $has_857u = 1;
+                    last;
+                }
+            }
+            last if $has_857u;
+        }
+
+        next if $has_857u;
+
+        push @missing_ebook_url_biblios, $biblio;
+    }
+
+    return \@missing_ebook_url_biblios;
 }
 
 sub _dir() {

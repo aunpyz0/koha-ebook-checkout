@@ -1,0 +1,58 @@
+[% INCLUDE 'doc-head-open.inc' %]
+<title>Koha Plugin: Ebook Checkout</title>
+[% INCLUDE 'doc-head-close.inc' %]
+</head>
+<body id="plugins_ebook_checkout_tool" class="plugins">
+[% INCLUDE 'header.inc' %]
+[% INCLUDE 'cat-search.inc' %]
+<div id="breadcrumbs">
+    <a href="/cgi-bin/koha/mainpage.pl">Home</a>
+    &rsaquo;
+    <a href="/cgi-bin/koha/plugins/plugins-home.pl">Plugins</a>
+    &rsaquo;
+    Ebook Checkout &rsaquo; Books missing 857$u
+</div>
+
+<div class="d-flex justify-content-center">
+    <div id="doc2" class="container">
+        <h1 class="mb-3">Books missing 857$u</h1>
+
+        <p class="mb-3">Found [% missing_ebook_url_count | html %] bibliographic records without a private ebook URL.</p>
+
+        [% IF missing_ebook_url_biblios.size %]
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th class="text-nowrap" style="width: 1%;">Biblionumber</th>
+                            <th>Title</th>
+                            <th class="text-nowrap" style="width: 1%;">Edit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        [% FOREACH biblio IN missing_ebook_url_biblios %]
+                            <tr>
+                                <td class="text-nowrap" style="width: 1%;">
+                                    <a href="/cgi-bin/koha/catalogue/detail.pl?biblionumber=[% biblio.biblionumber | uri %]" target="_blank" rel="noopener noreferrer">
+                                        [% biblio.biblionumber | html %]
+                                    </a>
+                                </td>
+                                <td>
+                                    [% biblio.title | html %]
+                                </td>
+                                <td class="text-nowrap" style="width: 1%;">
+                                    <a class="btn btn-primary btn-sm" href="/cgi-bin/koha/cataloguing/addbiblio.pl?biblionumber=[% biblio.biblionumber | uri %]" target="_blank" rel="noopener noreferrer">
+                                        Edit record
+                                    </a>
+                                </td>
+                            </tr>
+                        [% END %]
+                    </tbody>
+                </table>
+            </div>
+        [% ELSE %]
+            <div class="alert alert-info mb-0">All bibliographic records have 857$u.</div>
+        [% END %]
+    </div>
+</div>
+[% INCLUDE 'intranet-bottom.inc' %]

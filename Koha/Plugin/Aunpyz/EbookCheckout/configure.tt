@@ -12,34 +12,37 @@
     &rsaquo;
     Ebook Checkout &rsaquo; Configure
 </div>
-<div id="doc2" class="container">
-    <form class="form-horizontal" action="/cgi-bin/koha/plugins/run.pl" method="post">
-        [% INCLUDE 'csrf-token.inc' %]
-        <input type="hidden" name="class" value="[% CLASS %]"/>
-        <input type="hidden" name="method" value="[% METHOD %]"/>
 
-        <div class="mb-3">
-            <label for="hostname" class="form-label d-inline-block">Hostname for reader website</label>
-            <input class="form-control" type="url" name="hostname" value="[% hostname | html %]"/>
-            <div class="form-text">Left blank for the same hostname as OPAC hostname</div>
-        </div>
-        
-        <div class="mb-3">
-            <label for="interval_day" class="form-label d-inline-block">Interval for checkout</label>
-            <input class="form-control" type="number" min="1" name="interval_day" value="[% interval_day | html %]"/>
-            <div class="form-text">Interval (day) for same ebook checkout after checkin</div>
-        </div>
+<div class="d-flex justify-content-center">
+    <div id="doc2" class="container">
+        <form class="form-horizontal" action="/cgi-bin/koha/plugins/run.pl" method="post">
+            [% INCLUDE 'csrf-token.inc' %]
+            <input type="hidden" name="class" value="[% CLASS %]"/>
+            <input type="hidden" name="method" value="[% METHOD %]"/>
 
-        <div class="mb-3">
-            <label for="encryption_key" class="form-label d-inline-block">Encryption key</label>
-            <input class="form-control" type="text" name="encryption_key" id="encryption_key" value="[% encryption_key | html %]" minlength="8" maxlength="8" required />
-            <div class="form-text">Encryption key used to encrypt ebook file</div>
-            <div class="form-text">Must be exactly 8 characters long.</div>
-        </div>
+            <div class="mb-3">
+                <label for="hostname" class="form-label d-inline-block">Hostname for reader website</label>
+                <input class="form-control" type="url" name="hostname" value="[% hostname | html %]"/>
+                <div class="form-text">Left blank for the same hostname as OPAC hostname</div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="interval_day" class="form-label d-inline-block">Interval for checkout</label>
+                <input class="form-control" type="number" min="1" name="interval_day" value="[% interval_day | html %]"/>
+                <div class="form-text">Interval (day) for same ebook checkout after checkin</div>
+            </div>
 
-        <div>
-            <button type="submit" class="btn btn-primary">Update</button>
-        </div>
-    </form>
+            <div class="mb-3">
+                <label for="encryption_key" class="form-label d-inline-block">Encryption key</label>
+                <input class="form-control" type="text" name="encryption_key" id="encryption_key" value="[% encryption_key | html %]" minlength="8" maxlength="8" required />
+                <div class="form-text">Encryption key used to encrypt ebook file</div>
+                <div class="form-text">Must be exactly 8 characters long.</div>
+            </div>
+
+            <div>
+                <button type="submit" class="btn btn-primary">Update</button>
+            </div>
+        </form>
+    </div>
 </div>
 [% INCLUDE 'intranet-bottom.inc' %]
